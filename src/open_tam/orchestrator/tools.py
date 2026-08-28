@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Protocol
 
 from open_tam.faults import FaultState
+from open_tam.timeutil import parse_iso_local
 from open_tam.mock.logs_data import generate_logs
 from open_tam.mock.metrics_data import generate_series
 
@@ -48,8 +49,8 @@ def query_metrics_inline(metric: str, service: str, start: str, end: str) -> str
     points = generate_series(
         metric=metric,
         service=service,
-        start=datetime.fromisoformat(start),
-        end=datetime.fromisoformat(end),
+        start=parse_iso_local(start),
+        end=parse_iso_local(end),
         state=FaultState(),
     )
     return json.dumps(

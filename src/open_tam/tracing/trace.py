@@ -9,7 +9,12 @@ from pathlib import Path
 class TraceRecorder:
     """排查过程逐条追加 JSONL：每行 {ts, alert_id, kind, ...fields}，可回放。"""
 
-    def __init__(self, alert_id: str, traces_dir: Path | str | None = None) -> None:
+    def __init__(
+        self,
+        alert_id: str,
+        traces_dir: Path | str | None = None,
+        agent: str | None = None,
+    ) -> None:
         base = (
             Path(traces_dir)
             if traces_dir
@@ -17,20 +22,20 @@ class TraceRecorder:
         )
         base.mkdir(parents=True, exist_ok=True)
         self.alert_id = alert_id
+        self.agent = agent
         self.path = base / f"{alert_id}.jsonl"
 
     def record(self, kind: str, **fields: object) -> None:
-        line = json.dumps(
-            {
-                "ts": datetime.now().isoformat(timespec="milliseconds"),
-                "alert_id": self.alert_id,
-                "kind": kind,
-                **fields,
-            },
-            ensure_ascii=False,
-        )
+        entry: dict = {
+            "ts": datetime.now().isoformat(timespec="milliseconds"),
+            "alert_id": self.alert_id,
+            "kind": kind,
+        }
+        if self.agent:
+            entry["agent"] = self.agent
+        entry.update(fields)
         with self.path.open("a", encoding="utf-8") as f:
-            f.write(line + "\n")
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
 def load_trace(path: Path | str) -> list[dict]:

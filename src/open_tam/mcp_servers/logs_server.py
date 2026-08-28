@@ -7,6 +7,7 @@ from datetime import datetime
 from mcp.server.fastmcp import FastMCP
 
 from open_tam.faults import FaultState
+from open_tam.timeutil import parse_iso_local
 from open_tam.mock.logs_data import generate_logs
 
 mcp = FastMCP("mock-logs")
@@ -17,8 +18,8 @@ def query_logs(service: str, start: str, end: str, level: str | None = None, key
     """查询某服务的结构化日志。start/end 为 ISO 8601 时间；level 可选 INFO/WARN/ERROR；keyword 为消息子串（不区分大小写）。返回 JSON 数组字符串 [{ts, level, message}]。"""
     records = generate_logs(
         service=service,
-        start=datetime.fromisoformat(start),
-        end=datetime.fromisoformat(end),
+        start=parse_iso_local(start),
+        end=parse_iso_local(end),
         level=level,
         keyword=keyword,
         state=FaultState(),

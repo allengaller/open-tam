@@ -4,6 +4,7 @@ import json
 
 from open_tam.orchestrator.loop import ChatModel, ReActLoop
 from open_tam.orchestrator.tools import Backend, InlineBackend
+from open_tam.tracing.trace import TraceRecorder
 
 ORCHESTRATOR_PROMPT = """你是资深 SRE 运维专家（orchestrator）。收到告警后，通过两个子 Agent 排查：
 - ask_metric_agent(question)：向指标分析子 Agent 提问，确认异常是否存在、异常窗口与幅度；
@@ -31,6 +32,7 @@ class SpecialistAgent:
         model: ChatModel,
         backend: Backend | None = None,
         max_steps: int = 5,
+        trace: "TraceRecorder | None" = None,
     ) -> None:
         self.name = name
         self.system_prompt = system_prompt
@@ -38,11 +40,12 @@ class SpecialistAgent:
         self.model = model
         self.backend: Backend = backend or InlineBackend()
         self.max_steps = max_steps
+        self.trace = trace
 
     def run(self, question: str) -> str:
         loop = ReActLoop(
             model=self.model, backend=self.backend, max_steps=self.max_steps,
-            system_prompt=self.system_prompt, tools=self.tools,
+            system_prompt=self.system_prompt, tools=self.tools, trace=self.trace,
         )
         result = loop.run_prompt(
             self.system_prompt, question, alert_id=f"subagent-{self.name}"

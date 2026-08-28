@@ -95,9 +95,12 @@ class ReActLoop:
         self.trace = trace
 
     def run(self, alert: AlertEvent) -> DiagnosisResult:
+        from datetime import datetime
+
         return self.run_prompt(
             self.system_prompt,
-            f"告警信息：\n{alert.model_dump_json(indent=2)}",
+            f"告警信息：\n{alert.model_dump_json(indent=2)}\n\n"
+            f"当前时间：{datetime.now().isoformat(timespec='seconds')}（时间窗口一律用 ISO 8601 绝对时间）",
             alert_id=alert.alert_id,
         )
 

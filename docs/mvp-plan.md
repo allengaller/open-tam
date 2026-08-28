@@ -21,11 +21,11 @@
 
 ## M2 多 Agent + 语料
 
-- [ ] `mock-logs-mcp-server`（slow_query 模式日志）
-- [ ] `metric-agent` / `log-agent` 升级为独立子 Agent 协作
-- [ ] `tracing`：每步思考/工具调用/观察 JSONL 落盘
-- [ ] 故障模式扩充：slow_query / oom / connection_pool_exhausted
-- **验收**：慢查询故障排查引用日志证据；报告含三段结构；trace 可回放
+- [x] `mock-logs-mcp-server`（slow_query 模式日志）
+- [x] `metric-agent` / `log-agent` 升级为独立子 Agent 协作
+- [x] `tracing`：每步思考/工具调用/观察 JSONL 落盘（含子 Agent 内部步骤，agent 字段区分）
+- [x] 故障模式扩充：slow_query / oom / connection_pool_exhausted
+- **验收**：慢查询故障排查引用日志证据；报告含三段结构；trace 可回放 ✅（2026-08-29，真实模型路径：log 子 Agent 迭代查询命中慢查询日志签名，根因精确引用 SQL 原文；trace 含三 Agent 完整委托链）
 
 ## M3 护栏 + 巡检
 

@@ -17,3 +17,10 @@ def test_trace_env_default_dir(tmp_path, monkeypatch):
     rec = TraceRecorder("a2")
     rec.record("final", content="done")
     assert (tmp_path / "t" / "a2.jsonl").exists()
+
+
+def test_recorder_tags_agent_field(tmp_path):
+    rec = TraceRecorder("a3", traces_dir=tmp_path, agent="log")
+    rec.record("tool_call", tool="query_logs", arguments={"service": "demo-app"})
+    records = load_trace(rec.path)
+    assert records[0]["agent"] == "log"

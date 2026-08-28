@@ -107,6 +107,8 @@ def investigate(
     raw = json.loads(Path(alert_file).read_text(encoding="utf-8"))
     alert = normalize_alert(raw)
     trace = TraceRecorder(alert_id=alert.alert_id, traces_dir=settings.traces_dir)
+    metric_trace = TraceRecorder(alert_id=alert.alert_id, traces_dir=settings.traces_dir, agent="metric")
+    log_trace = TraceRecorder(alert_id=alert.alert_id, traces_dir=settings.traces_dir, agent="log")
     leaf_backend = InlineBackend() if transport == "inline" else McpStdioBackend()
 
     now = datetime.now().replace(second=0, microsecond=0)
@@ -152,10 +154,14 @@ def investigate(
             primary=settings.model_primary, fallback=settings.model_fallback
         )
         orch_model = llm
-        metric_agent = SpecialistAgent(name="metric", system_prompt=METRIC_AGENT_PROMPT,
-                                       tools=[QUERY_METRICS_SPEC], backend=leaf_backend, model=llm)
+        metric_agent = SpecialistAgent(
+            name="metric", system_prompt=METRIC_AGENT_PROMPT,
+            tools=[QUERY_METRICS_SPEC], backend=leaf_backend, model=llm,
+            trace=metric_trace,
+        )
         log_agent = SpecialistAgent(name="log", system_prompt=LOG_AGENT_PROMPT,
-                                    tools=[QUERY_LOGS_SPEC], backend=leaf_backend, model=llm)
+                                    tools=[QUERY_LOGS_SPEC], backend=leaf_backend, model=llm,
+                                    trace=log_trace)
 
     backend = AgentBackend({
         "ask_metric_agent": metric_agent,
