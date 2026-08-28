@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import re
 from datetime import datetime, timedelta
 
 from open_tam.faults import FAULT_MODES, FaultState
@@ -50,7 +51,9 @@ def generate_logs(
                 t += timedelta(seconds=step_seconds)
     records.sort(key=lambda r: r.ts)
     if level:
-        records = [r for r in records if r.level == level.upper()]
+        # LLM 可能传组合值（"ERROR/WARN"、"ERROR, WARN"），拆开匹配
+        wanted = {lv.strip().upper() for lv in re.split(r"[,/、]", level) if lv.strip()}
+        records = [r for r in records if r.level in wanted]
     if keyword:
         records = [r for r in records if keyword.lower() in r.message.lower()]
     return records

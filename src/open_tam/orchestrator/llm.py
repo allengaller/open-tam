@@ -25,6 +25,8 @@ class AgentScopeChatModel:
         self.primary = primary
         self.fallback = fallback
         self.api_key = api_key or os.environ.get("DASHSCOPE_API_KEY", "")
+        # 持久事件循环：避免每次 asyncio.run 后 httpx 客户端清理报 "Event loop is closed"
+        self._loop = asyncio.new_event_loop()
 
     def complete(self, messages: list[dict], tools: list[dict]) -> ModelReply:
         last_error: Exception | None = None
@@ -39,7 +41,7 @@ class AgentScopeChatModel:
     def _call_via_agentscope(
         self, model_name: str, messages: list[dict], tools: list[dict]
     ) -> ModelReply:
-        return asyncio.run(self._acall(model_name, messages, tools))
+        return self._loop.run_until_complete(self._acall(model_name, messages, tools))
 
     async def _acall(
         self, model_name: str, messages: list[dict], tools: list[dict]

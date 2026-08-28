@@ -46,3 +46,12 @@ def test_logs_deterministic(tmp_path):
     s1 = generate_logs("demo-app", start, end, state=state)
     s2 = generate_logs("demo-app", start, end, state=state)
     assert [(r.ts, r.level, r.message) for r in s1] == [(r.ts, r.level, r.message) for r in s2]
+
+
+def test_combined_level_filter(tmp_path):
+    state = FaultState(state_dir=tmp_path)
+    state.activate("slow_query", duration_minutes=30)
+    start, end = _window_around_fault(state)
+    for combined in ("ERROR/WARN", "ERROR, WARN", "ERROR、WARN"):
+        records = generate_logs("demo-app", start, end, level=combined, state=state)
+        assert records and all(r.level in {"ERROR", "WARN"} for r in records), combined
