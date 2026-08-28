@@ -17,7 +17,7 @@
 - [x] `orchestrator`：AgentScope ReActAgent 排查循环（M1 仅挂 query_metrics，query_logs 随 M2 接入）
 - [x] `reporting`：结构化报告生成落盘 `reports/`
 - [x] 主备模型配置（DashScope Qwen）+ 步数/token 双上限
-- **验收**：注入 CPU 飙升故障 → 全自动产出根因报告 ✅（2026-08-28，--fake 路径已验证；真实模型路径待 DASHSCOPE_API_KEY）
+- **验收**：注入 CPU 飙升故障 → 全自动产出根因报告 ✅（2026-08-28，--fake 路径与真实模型路径均已验证；真实路径经 DashScope qwen-plus 两轮工具调用收敛，报告含证据与排除项）
 
 ## M2 多 Agent + 语料
 
