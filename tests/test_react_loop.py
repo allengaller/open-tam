@@ -99,3 +99,34 @@ def test_tool_error_becomes_observation_not_crash():
     result = ReActLoop(model=model).run(_alert())
     assert result.steps[0].error
     assert result.root_cause is None
+
+
+def test_run_prompt_with_custom_tools_and_trace(tmp_path):
+    from open_tam.tracing.trace import TraceRecorder, load_trace
+
+    model = FakeChatModel([
+        ModelReply(content=None, tool_calls=[ToolCall(id="t1", name="query_logs", arguments={"service": "demo-app", "start": "2026-08-28T00:00:00", "end": "2026-08-28T01:00:00"})]),
+        ModelReply(content="日志显示慢查询", tool_calls=[]),
+    ])
+    rec = TraceRecorder("t-custom", traces_dir=tmp_path)
+    loop = ReActLoop(model=model, trace=rec, system_prompt="你是日志专家", tools=[{"name": "query_logs"}])
+    result = loop.run_prompt("你是日志专家", "查一下日志", alert_id="t-custom")
+    assert result.root_cause == "日志显示慢查询"
+    kinds = [r["kind"] for r in load_trace(rec.path)]
+    assert kinds == ["alert_received", "tool_call", "observation", "final"]
+
+
+def test_budget_exceeded_traced(tmp_path):
+    from open_tam.tracing.trace import TraceRecorder, load_trace
+
+    now = datetime.now().replace(second=0, microsecond=0)
+    args = {"metric": "cpu_usage", "service": "demo-app",
+            "start": (now - timedelta(minutes=5)).isoformat(), "end": now.isoformat()}
+    endless = FakeChatModel([
+        ModelReply(content=None, tool_calls=[ToolCall(id=f"t{i}", name="query_metrics", arguments=args)])
+        for i in range(20)
+    ])
+    rec = TraceRecorder("t-budget", traces_dir=tmp_path)
+    ReActLoop(model=endless, max_steps=1, trace=rec).run(_alert())
+    kinds = [r["kind"] for r in load_trace(rec.path)]
+    assert kinds == ["alert_received", "tool_call", "observation", "budget_exceeded"]

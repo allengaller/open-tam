@@ -7,6 +7,7 @@ from typing import Protocol
 
 from open_tam.models import AlertEvent
 from open_tam.orchestrator.tools import ALL_TOOLS, Backend, InlineBackend
+from open_tam.tracing.trace import TraceRecorder
 
 SYSTEM_PROMPT = """你是资深 SRE 运维专家。收到一条告警后，按"思考→调用工具→观察"循环排查：
 1. 先用 query_metrics 确认告警指标的异常窗口与幅度；
@@ -81,20 +82,35 @@ class ReActLoop:
         backend: Backend | None = None,
         max_steps: int = 15,
         char_budget: int = 60000,
+        system_prompt: str = SYSTEM_PROMPT,
+        tools: list[dict] | None = None,
+        trace: TraceRecorder | None = None,
     ) -> None:
         self.model = model
         self.backend: Backend = backend or InlineBackend()
         self.max_steps = max_steps
         self.char_budget = char_budget
+        self.system_prompt = system_prompt
+        self.tools: list[dict] = tools if tools is not None else ALL_TOOLS
+        self.trace = trace
 
     def run(self, alert: AlertEvent) -> DiagnosisResult:
+        return self.run_prompt(
+            self.system_prompt,
+            f"告警信息：\n{alert.model_dump_json(indent=2)}",
+            alert_id=alert.alert_id,
+        )
+
+    def run_prompt(self, system: str, user: str, alert_id: str = "adhoc") -> DiagnosisResult:
         messages: list[dict] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": f"告警信息：\n{alert.model_dump_json(indent=2)}"},
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
         ]
+        if self.trace:
+            self.trace.record("alert_received", user=user)
         steps: list[Step] = []
         for i in range(self.max_steps):
-            reply = self.model.complete(messages, ALL_TOOLS)
+            reply = self.model.complete(messages, self.tools)
             if reply.tool_calls:
                 for tc in reply.tool_calls:
                     step = Step(index=i, thought=reply.content, tool_name=tc.name,
@@ -105,6 +121,11 @@ class ReActLoop:
                         step.error = f"{type(exc).__name__}: {exc}"
                         step.observation = json.dumps({"tool_error": step.error}, ensure_ascii=False)
                     steps.append(step)
+                    if self.trace:
+                        self.trace.record("tool_call", step=i, thought=step.thought,
+                                          tool=tc.name, arguments=tc.arguments)
+                        self.trace.record("observation", step=i, tool=tc.name,
+                                          observation=step.observation, error=step.error)
                     messages.append({"role": "assistant", "content": reply.content or "",
                                      "tool_calls": [{"id": tc.id, "name": tc.name, "arguments": tc.arguments}]})
                     messages.append({"role": "tool", "name": tc.name,
@@ -112,24 +133,28 @@ class ReActLoop:
             elif reply.content is not None:
                 steps.append(Step(index=i, thought=reply.content, tool_name=None,
                                   arguments=None, observation=None))
-                return self._finalize(alert, reply.content, steps)
+                if self.trace:
+                    self.trace.record("final", content=reply.content)
+                return self._finalize(alert_id, reply.content, steps)
             if sum(len(str(m)) for m in messages) > self.char_budget:
                 break
+        if self.trace:
+            self.trace.record("budget_exceeded", steps=len(steps))
         return DiagnosisResult(
-            alert_id=alert.alert_id, root_cause=None,
+            alert_id=alert_id, root_cause=None,
             evidence=[], actions=["人工介入：自动排查达到步数/预算上限"],
             confidence="low", excluded=[],
             steps=steps, raw_final=None,
         )
 
     @staticmethod
-    def _finalize(alert: AlertEvent, content: str, steps: list[Step]) -> DiagnosisResult:
+    def _finalize(alert_id: str, content: str, steps: list[Step]) -> DiagnosisResult:
         match = re.search(r"\{.*\}", content, re.DOTALL)
         if match:
             try:
                 data = json.loads(match.group(0))
                 return DiagnosisResult(
-                    alert_id=alert.alert_id,
+                    alert_id=alert_id,
                     root_cause=data.get("root_cause"),
                     evidence=list(data.get("evidence", [])),
                     actions=list(data.get("actions", [])),
@@ -140,6 +165,6 @@ class ReActLoop:
             except json.JSONDecodeError:
                 pass
         return DiagnosisResult(
-            alert_id=alert.alert_id, root_cause=content, evidence=[], actions=[],
+            alert_id=alert_id, root_cause=content, evidence=[], actions=[],
             confidence="low", excluded=[], steps=steps, raw_final=content,
         )
