@@ -57,7 +57,7 @@ class DiagnosisResult:
     confidence: str
     excluded: list[str]
     steps: list[Step]
-    raw_final: str | None
+    raw_final: str | None = None
 
 
 class FakeChatModel:
