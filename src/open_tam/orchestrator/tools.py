@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Protocol
 
 from open_tam.faults import FaultState
+from open_tam.mock.logs_data import generate_logs
 from open_tam.mock.metrics_data import generate_series
 
 QUERY_METRICS_SPEC = {
@@ -24,7 +25,21 @@ QUERY_METRICS_SPEC = {
     },
 }
 
-ALL_TOOLS: list[dict] = [QUERY_METRICS_SPEC]
+QUERY_LOGS_SPEC = {
+    "name": "query_logs",
+    "description": "查询某服务的结构化日志，可按时间范围/级别/关键字过滤，用于获取异常现场证据。",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "service": {"type": "string", "description": "服务名，如 demo-app"},
+            "start": {"type": "string", "description": "起始时间 ISO 8601"},
+            "end": {"type": "string", "description": "结束时间 ISO 8601"},
+            "level": {"type": "string", "description": "可选，INFO/WARN/ERROR"},
+            "keyword": {"type": "string", "description": "可选，消息子串（不区分大小写）"},
+        },
+        "required": ["service", "start", "end"],
+    },
+}
 
 
 def query_metrics_inline(metric: str, service: str, start: str, end: str) -> str:
@@ -59,7 +74,24 @@ class InlineBackend:
     def execute(self, name: str, args: dict) -> str:
         if name == "query_metrics":
             return query_metrics_inline(**args)
+        if name == "query_logs":
+            return query_logs_inline(**args)
         return json.dumps({"error": f"unknown tool: {name}"})
+
+
+def query_logs_inline(service: str, start: str, end: str, level: str | None = None, keyword: str | None = None) -> str:
+    records = generate_logs(
+        service=service,
+        start=datetime.fromisoformat(start),
+        end=datetime.fromisoformat(end),
+        level=level,
+        keyword=keyword,
+        state=FaultState(),
+    )
+    return json.dumps(
+        [{"ts": r.ts.isoformat(), "level": r.level, "message": r.message} for r in records],
+        ensure_ascii=False,
+    )
 
 
 class McpStdioBackend:
@@ -76,9 +108,10 @@ class McpStdioBackend:
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
 
-        from open_tam.mcp_servers.metrics_server import _server_command
+        from open_tam.mcp_servers.logs_server import _server_command as logs_cmd
+        from open_tam.mcp_servers.metrics_server import _server_command as metrics_cmd
 
-        command, cmd_args = _server_command()
+        command, cmd_args = logs_cmd() if name == "query_logs" else metrics_cmd()
         params = StdioServerParameters(
             command=command, args=cmd_args, env=subprocess_env()
         )

@@ -12,8 +12,10 @@ from open_tam.orchestrator.tools import InlineBackend, McpStdioBackend
 
 app = typer.Typer(help="open-tam SRE Agent", no_args_is_help=True)
 metrics_app = typer.Typer(help="指标查询")
+logs_app = typer.Typer(help="日志查询")
 fault_app = typer.Typer(help="故障注入")
 app.add_typer(metrics_app, name="metrics")
+app.add_typer(logs_app, name="logs")
 app.add_typer(fault_app, name="fault")
 
 
@@ -31,6 +33,24 @@ def metrics_query(
     typer.echo(f"# {metric} @ {service} ({transport})")
     typer.echo(backend.execute("query_metrics", {
         "metric": metric, "service": service, "start": start, "end": end,
+    }))
+
+
+@logs_app.command("query")
+def logs_query(
+    service: str = typer.Option("demo-app"),
+    start: str = typer.Option(...),
+    end: str = typer.Option(...),
+    level: str = typer.Option(None),
+    keyword: str = typer.Option(None),
+    transport: str = typer.Option("inline", help="inline 或 mcp"),
+) -> None:
+    datetime.fromisoformat(start)
+    datetime.fromisoformat(end)
+    backend = InlineBackend() if transport == "inline" else McpStdioBackend()
+    typer.echo(f"# logs @ {service} ({transport})")
+    typer.echo(backend.execute("query_logs", {
+        "service": service, "start": start, "end": end, "level": level, "keyword": keyword,
     }))
 
 

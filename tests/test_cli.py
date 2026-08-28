@@ -50,3 +50,19 @@ def test_metrics_query_via_mcp_transport(tmp_path, monkeypatch):
     )
     assert result.exit_code == 0, result.output
     assert "value" in result.output
+
+
+def test_logs_query_via_mcp_transport(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPEN_TAM_STATE_DIR", str(tmp_path))
+    now = datetime.now().replace(second=0, microsecond=0)
+    result = runner.invoke(
+        app,
+        [
+            "logs", "query", "--transport", "mcp",
+            "--service", "demo-app",
+            "--start", now.isoformat(),
+            "--end", (now + timedelta(minutes=2)).isoformat(),
+        ],
+    )
+    assert result.exit_code == 0, result.output
+    assert "INFO" in result.output
