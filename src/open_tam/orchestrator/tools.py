@@ -41,6 +41,8 @@ QUERY_LOGS_SPEC = {
     },
 }
 
+ALL_TOOLS: list[dict] = [QUERY_METRICS_SPEC, QUERY_LOGS_SPEC]
+
 
 def query_metrics_inline(metric: str, service: str, start: str, end: str) -> str:
     points = generate_series(
