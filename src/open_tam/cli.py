@@ -8,7 +8,12 @@ from pathlib import Path
 import typer
 
 from open_tam.faults import FAULT_MODES, FaultState
-from open_tam.orchestrator.tools import InlineBackend, McpStdioBackend
+from open_tam.orchestrator.tools import (
+    QUERY_LOGS_SPEC,
+    QUERY_METRICS_SPEC,
+    InlineBackend,
+    McpStdioBackend,
+)
 
 app = typer.Typer(help="open-tam SRE Agent", no_args_is_help=True)
 metrics_app = typer.Typer(help="指标查询")
@@ -78,30 +83,64 @@ def investigate(
     fake: bool = typer.Option(False, help="使用内置 FakeChatModel（无 Key 演示）"),
     transport: str = typer.Option("inline", help="inline 或 mcp"),
 ) -> None:
-    """读取告警 JSON，运行排查循环并生成结构化根因报告。"""
+    """读取告警 JSON，orchestrator 委托双子 Agent 排查并生成结构化根因报告与 trace。"""
     from open_tam.config import Settings
-    from open_tam.orchestrator.loop import FakeChatModel, ModelReply, ReActLoop, ToolCall
+    from open_tam.orchestrator.agents import (
+        LOG_AGENT_PROMPT,
+        METRIC_AGENT_PROMPT,
+        ORCHESTRATOR_PROMPT,
+        AgentBackend,
+        SpecialistAgent,
+    )
+    from open_tam.orchestrator.loop import (
+        FakeChatModel,
+        ModelReply,
+        ReActLoop,
+        ToolCall,
+    )
+    from open_tam.orchestrator.tools import ORCHESTRATOR_TOOLS
     from open_tam.receiver.alert_receiver import normalize_alert
     from open_tam.reporting.report import save_report
+    from open_tam.tracing.trace import TraceRecorder
 
     settings = Settings.load()
     raw = json.loads(Path(alert_file).read_text(encoding="utf-8"))
     alert = normalize_alert(raw)
+    trace = TraceRecorder(alert_id=alert.alert_id, traces_dir=settings.traces_dir)
+    leaf_backend = InlineBackend() if transport == "inline" else McpStdioBackend()
+
+    now = datetime.now().replace(second=0, microsecond=0)
+    window = {"start": (now - timedelta(minutes=60)).isoformat(), "end": now.isoformat()}
 
     if fake:
-        now = datetime.now().replace(second=0, microsecond=0)
-        model = FakeChatModel([
-            ModelReply(content="先查指标确认异常窗口", tool_calls=[ToolCall(
-                id="t1", name="query_metrics",
-                arguments={"metric": alert.metric, "service": alert.service,
-                           "start": (now - timedelta(minutes=60)).isoformat(),
-                           "end": now.isoformat()})]),
+        orch_model = FakeChatModel([
+            ModelReply(content="先问指标子 Agent 确认异常", tool_calls=[ToolCall(
+                id="t1", name="ask_metric_agent",
+                arguments={"question": f"{alert.service} 的 {alert.metric} 最近一小时是否异常？异常窗口与幅度？"})]),
+            ModelReply(content="再向日志子 Agent 要现场证据", tool_calls=[ToolCall(
+                id="t2", name="ask_log_agent",
+                arguments={"question": f"检索 {alert.service} 最近一小时 ERROR/WARN 日志，找与 {alert.metric} 异常相关的证据"})]),
             ModelReply(content=(
                 '```json\n{"root_cause": "demo-app /search 接口低效正则导致 CPU 飙升", '
-                '"evidence": ["query_metrics 显示 cpu_usage 持续高于 85"], '
+                '"evidence": ["指标子 Agent：cpu_usage 持续高于 85", "日志子 Agent 返回的现场证据"], '
                 '"actions": ["回滚最近发布", "优化正则逻辑"], "confidence": "high"}\n```'),
                 tool_calls=[]),
         ])
+        metric_agent = SpecialistAgent(
+            name="metric", system_prompt=METRIC_AGENT_PROMPT,
+            tools=[QUERY_METRICS_SPEC], backend=leaf_backend,
+            model=FakeChatModel([ModelReply(content="cpu_usage 在最近 30 分钟持续高于 85，确认异常")]),
+        )
+        log_agent = SpecialistAgent(
+            name="log", system_prompt=LOG_AGENT_PROMPT,
+            tools=[QUERY_LOGS_SPEC], backend=leaf_backend,
+            model=FakeChatModel([
+                ModelReply(content=None, tool_calls=[ToolCall(id="l1", name="query_logs", arguments={
+                    "service": alert.service, "start": window["start"], "end": window["end"],
+                })]),
+                ModelReply(content="最近一小时无 ERROR 级日志，异常主要体现在指标层"),
+            ]),
+        )
     else:
         if not os.environ.get("DASHSCOPE_API_KEY"):
             typer.echo("错误：未设置 DASHSCOPE_API_KEY。真实排查需配置 Key，"
@@ -109,17 +148,46 @@ def investigate(
             raise typer.Exit(1)
         from open_tam.orchestrator.llm import AgentScopeChatModel
 
-        model = AgentScopeChatModel(
+        llm = AgentScopeChatModel(
             primary=settings.model_primary, fallback=settings.model_fallback
         )
+        orch_model = llm
+        metric_agent = SpecialistAgent(name="metric", system_prompt=METRIC_AGENT_PROMPT,
+                                       tools=[QUERY_METRICS_SPEC], backend=leaf_backend, model=llm)
+        log_agent = SpecialistAgent(name="log", system_prompt=LOG_AGENT_PROMPT,
+                                    tools=[QUERY_LOGS_SPEC], backend=leaf_backend, model=llm)
 
-    backend = InlineBackend() if transport == "inline" else McpStdioBackend()
-    loop = ReActLoop(model=model, backend=backend, max_steps=settings.max_steps,
-                     char_budget=settings.char_budget)
+    backend = AgentBackend({
+        "ask_metric_agent": metric_agent,
+        "ask_log_agent": log_agent,
+    })
+    loop = ReActLoop(model=orch_model, backend=backend, max_steps=settings.max_steps,
+                     char_budget=settings.char_budget, system_prompt=ORCHESTRATOR_PROMPT,
+                     tools=ORCHESTRATOR_TOOLS, trace=trace)
     result = loop.run(alert)
     path = save_report(alert, result, reports_dir=settings.reports_dir)
     typer.echo(f"report saved: {path}")
+    typer.echo(f"trace saved: {trace.path}")
     typer.echo(result.root_cause or "未定位根因")
+
+
+trace_app = typer.Typer(help="trace 回放")
+app.add_typer(trace_app, name="trace")
+
+
+@trace_app.command("show")
+def trace_show(alert_id: str = typer.Argument(...)) -> None:
+    """回放某次排查的 trace JSONL。"""
+    from open_tam.config import Settings
+    from open_tam.tracing.trace import load_trace
+
+    settings = Settings.load()
+    path = settings.traces_dir / f"{alert_id}.jsonl"
+    if not path.exists():
+        typer.echo(f"trace not found: {path}", err=True)
+        raise typer.Exit(1)
+    for record in load_trace(path):
+        typer.echo(json.dumps(record, ensure_ascii=False))
 
 
 @app.command("version")

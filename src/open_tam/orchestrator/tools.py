@@ -123,3 +123,25 @@ class McpStdioBackend:
                 await session.initialize()
                 result = await session.call_tool(name, args)
         return result.content[0].text
+
+ASK_METRIC_AGENT_SPEC = {
+    "name": "ask_metric_agent",
+    "description": "向指标分析子 Agent 提问：确认异常是否存在、异常窗口与幅度。",
+    "parameters": {
+        "type": "object",
+        "properties": {"question": {"type": "string", "description": "要分析的问题"}},
+        "required": ["question"],
+    },
+}
+
+ASK_LOG_AGENT_SPEC = {
+    "name": "ask_log_agent",
+    "description": "向日志检索子 Agent 提问：获取异常现场的日志证据。",
+    "parameters": {
+        "type": "object",
+        "properties": {"question": {"type": "string", "description": "要检索的问题"}},
+        "required": ["question"],
+    },
+}
+
+ORCHESTRATOR_TOOLS: list[dict] = [ASK_METRIC_AGENT_SPEC, ASK_LOG_AGENT_SPEC]

@@ -30,3 +30,26 @@ def test_investigate_missing_file_fails(tmp_path, monkeypatch):
     monkeypatch.setenv("OPEN_TAM_STATE_DIR", str(tmp_path))
     result = runner.invoke(app, ["investigate", "--alert-file", str(tmp_path / "nope.json"), "--fake"])
     assert result.exit_code != 0
+
+
+def test_investigate_fake_writes_trace(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPEN_TAM_STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("OPEN_TAM_REPORTS_DIR", str(tmp_path / "reports"))
+    monkeypatch.setenv("OPEN_TAM_TRACES_DIR", str(tmp_path / "traces"))
+    from open_tam.faults import FaultState
+    FaultState().activate("cpu_spike", duration_minutes=30)
+
+    alert_file = tmp_path / "alert.json"
+    alert_file.write_text(json.dumps({
+        "alert_name": "CPU使用率过高", "service": "demo-app",
+        "metric": "cpu_usage", "threshold": 80, "current_value": 92.5,
+    }), encoding="utf-8")
+
+    result = runner.invoke(app, ["investigate", "--alert-file", str(alert_file), "--fake"])
+    assert result.exit_code == 0, result.output
+    traces = list((tmp_path / "traces").glob("*.jsonl"))
+    assert len(traces) == 1
+    alert_id = traces[0].stem
+    shown = runner.invoke(app, ["trace", "show", alert_id])
+    assert shown.exit_code == 0, shown.output
+    assert "alert_received" in shown.output and "final" in shown.output
