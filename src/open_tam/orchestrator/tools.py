@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Protocol
 
 from open_tam.faults import FaultState
@@ -44,6 +45,14 @@ class Backend(Protocol):
     def execute(self, name: str, args: dict) -> str: ...
 
 
+def subprocess_env() -> dict[str, str]:
+    """MCP 子进程环境：把 src 注入 PYTHONPATH，使子进程导入不依赖 editable .pth。"""
+    env = {**os.environ}
+    src = str(Path(__file__).resolve().parents[2])
+    env["PYTHONPATH"] = src + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    return env
+
+
 class InlineBackend:
     """直连本地实现——与 MCP server 共享同一函数，测试与生产同路径。"""
 
@@ -71,7 +80,7 @@ class McpStdioBackend:
 
         command, cmd_args = _server_command()
         params = StdioServerParameters(
-            command=command, args=cmd_args, env={**os.environ}
+            command=command, args=cmd_args, env=subprocess_env()
         )
         # CliRunner 捕获的 stderr 无 fileno，errlog 必须指向 DEVNULL
         async with stdio_client(params, errlog=subprocess.DEVNULL) as (read, write):
