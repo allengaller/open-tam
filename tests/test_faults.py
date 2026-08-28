@@ -35,3 +35,10 @@ def test_unknown_fault_rejected(tmp_path):
     state = FaultState(state_dir=tmp_path)
     with pytest.raises(KeyError):
         state.activate("no_such_fault")
+
+
+@pytest.mark.parametrize("name", ["cpu_spike", "slow_query", "oom", "connection_pool_exhausted"])
+def test_fault_modes_have_full_story(name):
+    mode = FAULT_MODES[name]
+    assert mode.root_cause and mode.remediation and mode.anomaly_desc and mode.log_signature
+    assert mode.baseline_mid < mode.baseline_high < mode.spike_value

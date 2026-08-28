@@ -36,3 +36,18 @@ def test_series_deterministic_with_same_seed(tmp_path):
     s1 = _series(FaultState(state_dir=tmp_path))
     s2 = _series(FaultState(state_dir=tmp_path))
     assert [(p.ts, p.value) for p in s1] == [(p.ts, p.value) for p in s2]
+
+
+def test_slow_query_spike_in_window(tmp_path):
+    state = FaultState(state_dir=tmp_path)
+    state.activate("slow_query", duration_minutes=30)
+    start = state.snapshot_time("slow_query")
+    pts = generate_series(
+        metric="db_query_duration_ms", service="demo-app",
+        start=start - timedelta(minutes=5), end=start + timedelta(minutes=10),
+        seed=7, state=state,
+    )
+    in_window = [p for p in pts if p.ts >= start]
+    out_window = [p for p in pts if p.ts < start]
+    assert in_window and all(p.value >= 3000 for p in in_window)
+    assert out_window and all(p.value <= 350 for p in out_window)
