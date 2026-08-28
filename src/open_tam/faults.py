@@ -58,8 +58,9 @@ class FaultState:
         if name not in FAULT_MODES:
             raise KeyError(f"unknown fault mode: {name}")
         data = self._load()
+        # 指标点按分钟对齐，故障窗口也对齐到分钟，避免注入后当前点落在窗口前
         data[name] = {
-            "activated_at": datetime.now().isoformat(),
+            "activated_at": datetime.now().replace(second=0, microsecond=0).isoformat(),
             "duration_minutes": duration_minutes,
         }
         self._save(data)
