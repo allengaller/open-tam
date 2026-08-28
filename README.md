@@ -44,4 +44,4 @@ uv run open-tam investigate --alert-file /tmp/alert.json
 
 ## 已知环境注意事项
 
-- macOS + Python 3.12.13+：若使用旧版 uv（<0.12.7），`.venv` 内 editable `.pth` 可能被误标 hidden 导致包不可导入；升级 uv 即可（`uv self update`）。
+- macOS + Python 3.12.13+：`.venv` 内 editable `.pth` 若被标记 hidden（`UF_HIDDEN`），Python 会跳过它导致 `open_tam` 不可导入（本环境已观察到周期性复现）。修复：`chflags nohidden .venv/lib/python3.12/site-packages/*.pth`；pytest 已配置 `pythonpath = ["src"]` 不受影响。

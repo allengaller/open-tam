@@ -57,3 +57,15 @@ class MetricSeries(BaseModel):
     metric: str
     service: str
     points: list[MetricPoint] = Field(default_factory=list)
+
+
+class LogRecord(BaseModel):
+    ts: datetime
+    level: str
+    service: str
+    message: str
+
+    @field_validator("level", mode="before")
+    @classmethod
+    def _upper_level(cls, v: object) -> str:
+        return str(v).upper()

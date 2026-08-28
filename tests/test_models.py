@@ -3,7 +3,7 @@ from datetime import datetime
 import pytest
 from pydantic import ValidationError
 
-from open_tam.models import AlertEvent, MetricPoint, MetricSeries
+from open_tam.models import AlertEvent, LogRecord, MetricPoint, MetricSeries
 
 
 def test_alert_event_from_valid_raw():
@@ -57,3 +57,8 @@ def test_metric_series_roundtrip():
         points=[MetricPoint(ts=datetime(2026, 8, 28, 10, 0), value=30.0)],
     )
     assert s.points[0].value == 30.0
+
+
+def test_log_record_normalizes_level():
+    r = LogRecord(ts=datetime(2026, 8, 28, 10, 0), level="error", service="demo-app", message="boom")
+    assert r.level == "ERROR"
