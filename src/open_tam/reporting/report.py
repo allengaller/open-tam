@@ -40,10 +40,13 @@ def render_report(
         lines.append("1. （无）")
     lines += ["", "## 排查过程", ""]
     for s in result.steps:
-        args = json.dumps(s.arguments or {}, ensure_ascii=False)
-        lines.append(f"{s.index + 1}. {s.thought or ''} 调用 `{s.tool_name}` {args}")
-        obs = (s.observation or "")[:200]
-        lines.append(f"   - 观察：`{obs}`")
+        if s.tool_name:
+            args = json.dumps(s.arguments or {}, ensure_ascii=False)
+            lines.append(f"{s.index + 1}. {s.thought or ''} 调用 `{s.tool_name}` {args}")
+            obs = (s.observation or "")[:200]
+            lines.append(f"   - 观察：`{obs}`")
+        else:
+            lines.append(f"{s.index + 1}. （收敛输出，最终结论见结论摘要）")
     return "\n".join(lines)
 
 

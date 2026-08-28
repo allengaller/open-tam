@@ -107,7 +107,8 @@ class ReActLoop:
                     steps.append(step)
                     messages.append({"role": "assistant", "content": reply.content or "",
                                      "tool_calls": [{"id": tc.id, "name": tc.name, "arguments": tc.arguments}]})
-                    messages.append({"role": "tool", "name": tc.name, "content": step.observation})
+                    messages.append({"role": "tool", "name": tc.name,
+                                     "tool_call_id": tc.id, "content": step.observation})
             elif reply.content is not None:
                 steps.append(Step(index=i, thought=reply.content, tool_name=None,
                                   arguments=None, observation=None))

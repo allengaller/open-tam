@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# 运行时产物
+var/
+reports/
+traces/
+
+# 环境与密钥
+.env
+*.key
+
+# macOS
+.DS_Store
