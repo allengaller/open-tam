@@ -4,20 +4,20 @@
 
 ## M0 骨架
 
-- [ ] 项目脚手架（uv + pyproject + pytest）
-- [ ] 数据模型：AlertEvent / MetricPoint / LogRecord
-- [ ] `demo-app`：简单 Web 服务 + 故障注入（cpu_spike 可注入）
-- [ ] `mock-metrics-mcp-server`：故障模式联动时序数据（cpu_spike 模式）
-- [ ] CLI：`open-tam metrics query` 直连 MCP 查指标
-- **验收**：`open-tam metrics query` 返回注入故障前后的指标序列
+- [x] 项目脚手架（uv + pyproject + pytest）
+- [x] 数据模型：AlertEvent / MetricPoint / LogRecord
+- [x] `demo-app`：简单 Web 服务 + 故障注入（cpu_spike 可注入）
+- [x] `mock-metrics-mcp-server`：故障模式联动时序数据（cpu_spike 模式）
+- [x] CLI：`open-tam metrics query` 直连 MCP 查指标
+- **验收**：`open-tam metrics query` 返回注入故障前后的指标序列 ✅（2026-08-28，inline 与 MCP 双后端输出一致）
 
 ## M1 排查闭环
 
-- [ ] `alert-receiver`：CLI 告警注入 + AlertEvent 标准化
-- [ ] `orchestrator`：AgentScope ReActAgent 排查循环（M1 仅挂 query_metrics，query_logs 随 M2 接入）
-- [ ] `reporting`：结构化报告生成落盘 `reports/`
-- [ ] 主备模型配置（DashScope Qwen）+ 步数/token 双上限
-- **验收**：注入 CPU 飙升故障 → 全自动产出根因报告（需 DASHSCOPE_API_KEY）
+- [x] `alert-receiver`：CLI 告警注入 + AlertEvent 标准化
+- [x] `orchestrator`：AgentScope ReActAgent 排查循环（M1 仅挂 query_metrics，query_logs 随 M2 接入）
+- [x] `reporting`：结构化报告生成落盘 `reports/`
+- [x] 主备模型配置（DashScope Qwen）+ 步数/token 双上限
+- **验收**：注入 CPU 飙升故障 → 全自动产出根因报告 ✅（2026-08-28，--fake 路径已验证；真实模型路径待 DASHSCOPE_API_KEY）
 
 ## M2 多 Agent + 语料
 
