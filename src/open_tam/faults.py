@@ -35,14 +35,13 @@ FAULT_MODES: dict[str, FaultMode] = {
     ),
 }
 
-_DEFAULT_STATE_DIR = Path(os.environ.get("OPEN_TAM_STATE_DIR", "var"))
-
 
 class FaultState:
     """跨进程共享的故障状态（JSON 文件），demo-app 注入与 mock 数据源共用。"""
 
     def __init__(self, state_dir: Path | str | None = None) -> None:
-        self.path = Path(state_dir) if state_dir else _DEFAULT_STATE_DIR
+        # 构造时读取环境变量（而非 import 时固化），保证测试可在运行期隔离
+        self.path = Path(state_dir) if state_dir else Path(os.environ.get("OPEN_TAM_STATE_DIR", "var"))
         self.path.mkdir(parents=True, exist_ok=True)
         self.file = self.path / "fault_state.json"
 
