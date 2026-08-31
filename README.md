@@ -43,6 +43,14 @@ uv run open-tam investigate --alert-file /tmp/alert.json
 | `uv run python -m open_tam.mcp_servers.metrics_server` | 启动 mock-metrics MCP stdio 服务 |
 | `open-tam logs query --service demo-app --start <iso> --end <iso> [--level ERROR] [--keyword slow]` | 查日志（双后端同 metrics） |
 | `open-tam trace show <alert-id>` | 回放某次排查的 JSONL（含子 Agent 内部步骤） |
+| `open-tam action list` | 查看白名单动作注册表 |
+| `open-tam action run clear_fault --arg name=cpu_spike` | 执行白名单动作（safe 直接执行） |
+| `open-tam action run rollback_release --arg service=demo-app` | 敏感动作：交互确认后执行 |
+| `open-tam action run rollback_release --arg service=demo-app --yes` | 敏感动作：跳过确认 |
+| `open-tam action run any --dry-run` | dry-run 预览，不实际执行 |
+| `open-tam audit show` | 查看审计日志（JSONL） |
+| `open-tam patrol run` | 立即巡检一次，产出巡检报告 |
+| `open-tam patrol watch --every-min 5` | 每 5 分钟巡检一次（Ctrl-C 退出） |
 
 ## 已知环境注意事项
 

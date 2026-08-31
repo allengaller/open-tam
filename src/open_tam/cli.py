@@ -98,7 +98,9 @@ def investigate(
         ReActLoop,
         ToolCall,
     )
-    from open_tam.orchestrator.tools import ORCHESTRATOR_TOOLS
+    from open_tam.actions import ACTION_REGISTRY
+    from open_tam.guardrails import AuditLogger, AutoDeny, Guardrails
+    from open_tam.orchestrator.tools import ORCHESTRATOR_TOOLS, GuardrailsBackend
     from open_tam.receiver.alert_receiver import normalize_alert
     from open_tam.reporting.report import save_report
     from open_tam.tracing.trace import TraceRecorder
@@ -167,6 +169,9 @@ def investigate(
         "ask_metric_agent": metric_agent,
         "ask_log_agent": log_agent,
     })
+    guardrails = Guardrails(ACTION_REGISTRY, AuditLogger(settings.state_dir),
+                            confirmer=AutoDeny())
+    backend = GuardrailsBackend(backend, guardrails, actor="agent")
     loop = ReActLoop(model=orch_model, backend=backend, max_steps=settings.max_steps,
                      char_budget=settings.char_budget, system_prompt=ORCHESTRATOR_PROMPT,
                      tools=ORCHESTRATOR_TOOLS, trace=trace)
