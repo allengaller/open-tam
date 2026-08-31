@@ -227,6 +227,42 @@ def audit_show(limit: int = typer.Option(20, help="显示最近 N 条")) -> None
         typer.echo(json.dumps(entry, ensure_ascii=False))
 
 
+patrol_app = typer.Typer(help="定时巡检")
+app.add_typer(patrol_app, name="patrol")
+
+
+@patrol_app.command("run")
+def patrol_run(transport: str = typer.Option("inline", help="inline 或 mcp")) -> None:
+    from open_tam.config import Settings
+    from open_tam.patrol import run_patrol
+
+    settings = Settings.load()
+    backend = InlineBackend() if transport == "inline" else McpStdioBackend()
+    path = run_patrol(settings.reports_dir, backend=backend)
+    typer.echo(f"patrol report: {path}")
+
+
+@patrol_app.command("watch")
+def patrol_watch(
+    every_min: int = typer.Option(5, help="巡检间隔（分钟）"),
+    max_runs: int = typer.Option(0, help="最大巡检次数，0 表示不限（Ctrl-C 退出）"),
+) -> None:
+    import time
+
+    from open_tam.config import Settings
+    from open_tam.patrol import run_patrol
+
+    settings = Settings.load()
+    runs = 0
+    while max_runs <= 0 or runs < max_runs:
+        path = run_patrol(settings.reports_dir)
+        typer.echo(f"patrol report: {path}")
+        runs += 1
+        if max_runs > 0 and runs >= max_runs:
+            break
+        time.sleep(every_min * 60)
+
+
 trace_app = typer.Typer(help="trace 回放")
 app.add_typer(trace_app, name="trace")
 
