@@ -177,6 +177,56 @@ def investigate(
     typer.echo(result.root_cause or "未定位根因")
 
 
+action_app = typer.Typer(help="运维动作（白名单 + dry-run + 确认 + 审计）")
+audit_app = typer.Typer(help="审计日志查看")
+app.add_typer(action_app, name="action")
+app.add_typer(audit_app, name="audit")
+
+
+@action_app.command("list")
+def action_list() -> None:
+    from open_tam.actions import ACTION_REGISTRY
+
+    for spec in ACTION_REGISTRY.values():
+        params = ", ".join(spec.params) or "无"
+        typer.echo(f"{spec.name} [{spec.sensitivity}] {spec.description} 参数: {params}")
+
+
+@action_app.command("run")
+def action_run(
+    action: str = typer.Argument(..., help="动作名，见 open-tam action list"),
+    args: list[str] = typer.Option(None, "--arg", help="动作参数，格式 k=v，可多次"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="仅预览，不执行"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="跳过敏感操作人工确认"),
+) -> None:
+    from open_tam.actions import ACTION_REGISTRY
+    from open_tam.config import Settings
+    from open_tam.guardrails import AuditLogger, AutoApprove, Guardrails, InteractiveConfirmer
+
+    settings = Settings.load()
+    arguments: dict[str, str] = {}
+    for pair in args or []:
+        if "=" not in pair:
+            typer.echo(f"无效参数（需 k=v）: {pair}", err=True)
+            raise typer.Exit(1)
+        key, value = pair.split("=", 1)
+        arguments[key] = value
+    confirmer = AutoApprove() if yes else InteractiveConfirmer()
+    guard = Guardrails(ACTION_REGISTRY, AuditLogger(settings.state_dir), confirmer=confirmer)
+    typer.echo(guard.run(action, arguments, actor="cli", dry_run=dry_run, confirmed=yes))
+
+
+@audit_app.command("show")
+def audit_show(limit: int = typer.Option(20, help="显示最近 N 条")) -> None:
+    from open_tam.config import Settings
+    from open_tam.guardrails import AuditLogger
+
+    settings = Settings.load()
+    entries = AuditLogger(settings.state_dir).entries()
+    for entry in entries[-limit:]:
+        typer.echo(json.dumps(entry, ensure_ascii=False))
+
+
 trace_app = typer.Typer(help="trace 回放")
 app.add_typer(trace_app, name="trace")
 
