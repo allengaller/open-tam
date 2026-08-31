@@ -8,6 +8,12 @@ from open_tam.cli import app
 runner = CliRunner()
 
 
+def test_serve_command_registered():
+    result = runner.invoke(app, ["serve", "--help"])
+    assert result.exit_code == 0
+    assert "--host" in result.output and "--port" in result.output
+
+
 def test_metrics_query_returns_points(tmp_path, monkeypatch):
     monkeypatch.setenv("OPEN_TAM_STATE_DIR", str(tmp_path))
     now = datetime.now().replace(second=0, microsecond=0)

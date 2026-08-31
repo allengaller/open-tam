@@ -213,6 +213,20 @@ def trace_show(alert_id: str = typer.Argument(...)) -> None:
         typer.echo(json.dumps(record, ensure_ascii=False))
 
 
+@app.command("serve")
+def serve(
+    host: str = typer.Option("127.0.0.1", help="监听地址"),
+    port: int = typer.Option(8000, help="监听端口"),
+) -> None:
+    """启动 Web UI（FastAPI + 单页聊天界面 + SSE 流式排查过程）。"""
+    import uvicorn
+
+    from open_tam.web.app import create_app
+
+    typer.echo(f"open-tam web ui: http://{host}:{port}")
+    uvicorn.run(create_app(), host=host, port=port)
+
+
 @app.command("version")
 def version() -> None:
     from open_tam import __version__
