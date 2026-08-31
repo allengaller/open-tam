@@ -51,6 +51,7 @@ uv run open-tam investigate --alert-file /tmp/alert.json
 | `open-tam audit show` | 查看审计日志（JSONL） |
 | `open-tam patrol run` | 立即巡检一次，产出巡检报告 |
 | `open-tam patrol watch --every-min 5` | 每 5 分钟巡检一次（Ctrl-C 退出） |
+| `open-tam serve [--host 127.0.0.1] [--port 8000]` | 启动 Web UI（聊天式流式排查） |
 
 ## 已知环境注意事项
 
