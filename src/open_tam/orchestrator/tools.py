@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Protocol
 
 from open_tam.faults import FaultState
+from open_tam.guardrails import Guardrails
 from open_tam.timeutil import parse_iso_local
 from open_tam.mock.logs_data import generate_logs
 from open_tam.mock.metrics_data import generate_series
@@ -145,4 +146,33 @@ ASK_LOG_AGENT_SPEC = {
     },
 }
 
-ORCHESTRATOR_TOOLS: list[dict] = [ASK_METRIC_AGENT_SPEC, ASK_LOG_AGENT_SPEC]
+EXECUTE_ACTION_SPEC = {
+    "name": "execute_action",
+    "description": "执行白名单内的运维动作（如 clear_fault 修复故障）。白名单外动作会被拒绝；敏感动作在无人确认场景会被拒绝并写入审计。",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "action": {"type": "string", "description": "动作名，如 clear_fault"},
+            "arguments": {"type": "object", "description": "动作参数，如 {\"name\": \"cpu_spike\"}"},
+        },
+        "required": ["action"],
+    },
+}
+
+ORCHESTRATOR_TOOLS: list[dict] = [ASK_METRIC_AGENT_SPEC, ASK_LOG_AGENT_SPEC, EXECUTE_ACTION_SPEC]
+
+
+class GuardrailsBackend:
+    """execute_action 走护栏决策，其余工具透传内层后端。"""
+
+    def __init__(self, inner: Backend, guardrails: Guardrails, actor: str = "agent") -> None:
+        self.inner = inner
+        self.guardrails = guardrails
+        self.actor = actor
+
+    def execute(self, name: str, args: dict) -> str:
+        if name == "execute_action":
+            return self.guardrails.run(
+                args["action"], args.get("arguments") or {}, actor=self.actor
+            )
+        return self.inner.execute(name, args)
