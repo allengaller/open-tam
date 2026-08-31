@@ -33,7 +33,7 @@
 - [x] 审计日志 `audit.log`
 - [x] 定时巡检任务（阈值巡检，输出巡检报告）
 - [x] orchestrator 接入 `execute_action`（agent 路径 safe 动作可执行、敏感动作自动拒绝）
-- **验收**：白名单外命令被拦截且审计可查；巡检报告按时生成 ✅（2026-08-31，见验收记录）
+- **验收**：白名单外命令被拦截且审计可查；巡检报告按时生成 ✅（2026-08-31，`action run deploy_to_prod` 返回 `{"denied": true, "reason": "白名单外动作: deploy_to_prod"}` 且 audit 记录 decision=denied；clear_fault --dry-run 输出预览未实际执行；rollback_release --yes 走人工确认输出 simulated；patrol run 产出巡检报告含 cpu_spike 异常（峰值 92.0 超阈值 45.0）与异常跟进段；fake 路径 investigate 全流程回归无异常；全量 92 passed + 1 skipped）
 
 ## M4 Web UI
 
