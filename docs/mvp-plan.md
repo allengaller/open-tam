@@ -37,9 +37,9 @@
 
 ## M4 Web UI
 
-- [ ] FastAPI 服务 + 单页聊天界面
-- [ ] 排查过程流式展示（步骤/工具调用实时可见）
-- **验收**：浏览器发起排查并看到流式过程
+- [x] FastAPI 服务 + 单页聊天界面
+- [x] 排查过程流式展示（步骤/工具调用实时可见）
+- **验收**：浏览器发起排查并看到流式过程 ✅（2026-08-31，`open-tam serve` 127.0.0.1:8765 起服务，选 cpu_spike 故障模板一键注入并预填告警 JSON，fake 路径浏览器流式渲染 orchestrator/子 Agent 事件与最终报告卡片（根因/置信度/证据/建议动作/报告路径），报告 `reports/2026-08-31-6638550db3f2.md` 落盘且 trace 可回放；POST `/api/investigations` 422 校验、`/api/investigations/{id}/events` SSE 流式 200、`/api/faults` 列表与 activate 404、`GET /` 静态页全 5 个 API 用例绿；107 passed + 1 skipped）
 
 ## M5 实盘接入
 
