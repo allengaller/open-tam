@@ -2,9 +2,37 @@
 
 基于 AgentScope + MCP 的多 Agent 排障系统：告警进来，自动查指标、翻日志，产出结构化根因报告；排查过程全程落盘为语料。
 
+核心定位：**把 TAM 的工作显性化**——排查这类隐性经验变成显式、可读、可评测的资产。新 TAM 照着 trace 入职上手，老 TAM 用报告与账本梳理自己的工作，团队沉淀最佳实践。
+
+## 产品主页（GTM 落地页）
+
+页面地址：**[GTM/index.html](GTM/index.html)**（`Open TAM` 产品主页，纯静态单文件，零构建，可直接部署 GitHub Pages 等静态托管）
+
+本地预览：
+
+```bash
+python3 -m http.server 8643 --directory GTM
+# 浏览器打开 http://127.0.0.1:8643/
+```
+
+## 文档
+
 - 架构一页纸：[docs/architecture.md](docs/architecture.md)
 - MVP 分阶段清单：[docs/mvp-plan.md](docs/mvp-plan.md)
 - 设计文档：[docs/superpowers/specs/2026-08-28-sre-agent-design.md](docs/superpowers/specs/2026-08-28-sre-agent-design.md)
+- 产品定位与受众：[PRODUCT.md](PRODUCT.md)
+- GTM 页面设计系统契约：[DESIGN.md](DESIGN.md)
+
+## 当前进展
+
+| 里程碑 | 状态 |
+|---|---|
+| M0 骨架 | 已完成 |
+| M1 排查闭环 | 已完成（DashScope qwen-plus 真实模型验收通过） |
+| M2 多 Agent + 语料 | 已完成（orchestrator + metric-agent + log-agent，trace 落盘） |
+| M3 护栏 + 巡检 | 已完成（2026-08-31 验收：白名单拦截、审计日志、阈值巡检报告、fake 回归） |
+| M4 Web UI | 设计已定稿（SSE 流式排查 + 单页聊天界面），实现待启动 |
+| M5 实盘接入 | 规划中（云监控 webhook + alibabacloud-observability MCP + SLS） |
 
 ## 快速开始
 

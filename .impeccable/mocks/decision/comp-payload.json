@@ -1,0 +1,38 @@
+{
+  "title": "接线总机 · 选定构图",
+  "question": "三张构图同一世界，选一张作为构建契约（其余两张的构图野心可在实现中部分吸收）。",
+  "options": [
+    {
+      "id": "comp-a",
+      "label": "横向机箱（指派原图）",
+      "thesis": "信号左→右：IN 插告警线，铜汇流排居中，报告从右侧 OUT 口吐出，CTA 在底部条带。",
+      "palette": ["#C7C2B2", "#1D1C1A", "#B0793A", "#E8A13D", "#F4F1E8"],
+      "materials": ["丝印烤漆面板", "端子排与跳线", "Dymo 标签纸", "jewel 状态灯"],
+      "viewport": "通栏设备面板：左 IN、中汇流排+端子排、右 OUT 报告；底部红色实体按钮 CTA。",
+      "risk": "横向三段若密度不足，中段端子排会显得空。",
+      "comp": ".impeccable/mocks/decision/assigned.png"
+    },
+    {
+      "id": "comp-b",
+      "label": "纵向机柜",
+      "thesis": "信号上→下：告警从顶部进入，经保险丝、汇流排、端子排，报告从底部 OUT 抽屉抽出，CTA 在抽屉旁。",
+      "palette": ["#C7C2B2", "#1D1C1A", "#B0793A", "#E8A13D", "#F4F1E8"],
+      "materials": ["机架立柱", "密集端子排", "OUT 抽屉", "实体按钮"],
+      "viewport": "纵向 rack：顶部铭牌+状态灯，底部抽屉报告与红色按钮。",
+      "risk": "纵向流在宽屏上两侧留白多，需要侧栏内容补密度。",
+      "comp": ".impeccable/mocks/comps/comp-b.png"
+    },
+    {
+      "id": "comp-c",
+      "label": "铭牌标题优先",
+      "thesis": "上半幅巨型丝印标题「告警进来，报告出去」+ 副线「多 Agent 排障系统 · 排查即语料」，下半幅浅操作带完成演示。",
+      "palette": ["#C7C2B2", "#1D1C1A", "#B0793A", "#E8A13D", "#F4F1E8"],
+      "materials": ["丝印墙面", "浅操作带", "实体按钮"],
+      "viewport": "标题优先：大字丝印占上半，设备带占下半，CTA 在右端。",
+      "risk": "标题区若排版失手会滑向普通 hero。",
+      "comp": ".impeccable/mocks/comps/comp-c.png"
+    }
+  ],
+  "buildPath": { "value": "comp", "toggle": false },
+  "steer": true
+}

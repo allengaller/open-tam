@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Open TAM · SRE Agent — 把 TAM 的排查工作显性化</title>
+<meta name="description" content="Open TAM 把 TAM 的排查工作显性化：告警进来，自动查指标、翻日志，产出三段式根因报告，全程落盘为语料。新人照着 trace 学会排查路径，老 TAM 梳理自己的工作，团队沉淀可评测的最佳实践。">
+<meta name="theme-color" content="#0B1016">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* DIRECTION · Ops Console（值班控制台）· approved 2026-08-31
+ * 专业 DevOps 控制台语汇：深色默认 + 浅色可切，蓝青强调，状态语义色。
+ * 品牌：Open TAM（展示层大写）；命令/路径保持小写 open-tam。
+ * copy: repo-grounded, no invented metrics · IA/copy 1:1 继承自上一版 */
+:root{
+  --bg:#0B1016; --bg-soft:#0E141C; --panel:#121A24; --panel-hi:#17212E;
+  --border:#1F2C3D; --border-strong:#2E405A;
+  --text:#E8EFF7; --text-2:#9DB0C3; --text-3:#64798F;
+  --accent:#38BDF8; --accent-soft:rgba(56,189,248,.12);
+  --cta:#2563EB; --cta-hi:#1D4ED8;
+  --ok:#34D399; --warn:#FBBF24; --crit:#F87171;
+  --code-bg:#0D131B; --code-text:#C9D6E5; --code-dim:#64798F; --code-border:#1B2836;
+  --shadow:0 8px 24px -12px rgba(0,0,0,.55);
+  --dot-grid:rgba(148,163,184,.055);
+  color-scheme:dark;
+}
+[data-theme="light"]{
+  --bg:#F5F7FA; --bg-soft:#EDF1F6; --panel:#FFFFFF; --panel-hi:#F8FAFC;
+  --border:#E3E9F0; --border-strong:#CBD5E1;
+  --text:#0F1B2D; --text-2:#47586E; --text-3:#7A8AA0;
+  --accent:#0284C7; --accent-soft:rgba(2,132,199,.10);
+  --cta:#1D4ED8; --cta-hi:#1E40AF;
+  --ok:#059669; --warn:#B45309; --crit:#DC2626;
+  --shadow:0 8px 20px -12px rgba(15,27,45,.22);
+  --dot-grid:rgba(15,27,45,.045);
+  color-scheme:light;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+html,body{overflow-x:clip}
+body{
+  font-family:"Inter","Noto Sans SC",system-ui,sans-serif;
+  background:
+    radial-gradient(var(--dot-grid) 1px,transparent 1px),
+    var(--bg);
+  background-size:24px 24px,auto;
+  color:var(--text);
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--accent);color:#08131E}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1,h2,h3{overflow-wrap:anywhere;letter-spacing:-.01em;text-wrap:balance}
+.mono{font-family:"JetBrains Mono",monospace}
+a{color:inherit}
+.skip{position:absolute;left:-999px;top:0;background:var(--accent);color:#08131E;padding:.5rem 1rem;z-index:99;border-radius:6px;font-weight:600}
+.skip:focus{left:8px;top:8px}
+.wrap{max-width:1200px;margin:0 auto;padding:0 clamp(14px,3vw,32px)}
+
+/* ============ 通用元件 ============ */
+.tag{display:inline-block;background:var(--bg-soft);color:var(--text-2);
+  font-family:"JetBrains Mono",monospace;font-size:.76rem;font-weight:500;
+  border:1px solid var(--border);border-radius:6px;padding:.18rem .6rem;white-space:nowrap}
+.tag.off{opacity:.55;border-style:dashed;color:var(--text-3)}
+.pill{display:inline-flex;align-items:center;gap:.35rem;font-family:"JetBrains Mono",monospace;
+  font-size:.66rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  border-radius:999px;padding:.14rem .6rem}
+.pill.ok{color:var(--ok);background:transparent;border:1px solid var(--ok)}
+.pill.now{color:var(--accent);border:1px solid var(--accent)}
+.pill.todo{color:var(--text-3);border:1px solid var(--border-strong)}
+.module{position:relative;background:var(--panel);border:1px solid var(--border);
+  border-radius:12px;box-shadow:var(--shadow)}
+.module-h{display:flex;align-items:center;gap:.9rem;padding:1.15rem 1.8rem 1rem;
+  border-bottom:1px solid var(--border)}
+.module-h .no{font-family:"JetBrains Mono",monospace;font-weight:600;font-size:.78rem;
+  color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:.18rem .55rem}
+.module-h h2{font-size:clamp(1.3rem,2.2vw,1.7rem);font-weight:800;min-width:0}
+.module-h .en{margin-left:auto;font-family:"JetBrains Mono",monospace;font-weight:500;
+  letter-spacing:.18em;color:var(--text-3);font-size:.7rem;text-transform:uppercase;white-space:nowrap}
+.module-b{padding:1.8rem}
+.ledger-note{margin-top:1.1rem;color:var(--text-2);font-size:.95rem}
+.ledger-note b{color:var(--text)}
+
+/* ============ HERO ============ */
+.hero{position:relative;display:flex;flex-direction:column;min-height:100svh;
+  border-bottom:1px solid var(--border)}
+.hero .wrap{width:100%}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:1rem;
+  padding-top:1.1rem;padding-bottom:1.1rem;border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:.65rem;min-width:0}
+.brand-mark{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:1rem;
+  color:#08131E;background:var(--accent);border-radius:6px;padding:.1rem .45rem;line-height:1.3}
+[data-theme="light"] .brand-mark{color:#F8FAFC}
+.brand b{font-size:1.08rem;font-weight:700;letter-spacing:-.01em;white-space:nowrap}
+.brand-sub{font-family:"JetBrains Mono",monospace;font-size:.68rem;letter-spacing:.16em;
+  text-transform:uppercase;color:var(--text-3);white-space:nowrap}
+.theme-seg{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--panel)}
+.theme-seg .seg{appearance:none;border:0;background:transparent;color:var(--text-2);
+  font-family:inherit;font-size:.78rem;font-weight:500;padding:.4rem .85rem;cursor:pointer}
+.theme-seg .seg+ .seg{border-left:1px solid var(--border)}
+.theme-seg .seg[aria-pressed="true"]{background:var(--panel-hi);color:var(--text);font-weight:600}
+.hero-in{flex:1;display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);
+  gap:clamp(2rem,4vw,3.5rem);align-items:center;padding-top:clamp(2.4rem,5vw,4rem);padding-bottom:clamp(2.4rem,5vw,4rem)}
+.eyebrow{display:inline-flex;align-items:center;gap:.55rem;font-family:"JetBrains Mono",monospace;
+  font-size:.72rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);
+  border:1px solid var(--border-strong);border-radius:999px;padding:.32rem .85rem;background:var(--panel)}
+.eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse-dot 2s infinite}
+@keyframes pulse-dot{50%{opacity:.35}}
+.hero-copy h1{margin-top:1.2rem;font-size:clamp(1.9rem,4vw,3rem);font-weight:800;line-height:1.18}
+.hero-copy .sub{margin-top:.9rem;font-size:clamp(.92rem,1.5vw,1.02rem);color:var(--text-2);word-break:keep-all}
+.hero-copy .sub b{color:var(--text);font-weight:700}
+.cta-row{display:flex;gap:.8rem;flex-wrap:wrap;margin-top:1.8rem}
+.btn-primary,.btn-ghost{display:inline-flex;align-items:center;justify-content:center;
+  border-radius:8px;padding:.72rem 1.5rem;font-weight:600;font-size:.95rem;text-decoration:none;white-space:nowrap}
+.btn-primary{background:var(--cta);color:#fff;border:1px solid var(--cta)}
+.btn-primary:hover{background:var(--cta-hi);border-color:var(--cta-hi)}
+.btn-primary:active{transform:translateY(1px)}
+.btn-ghost{border:1px solid var(--border-strong);color:var(--text)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ---- 排查控制台窗口 ---- */
+.console{background:var(--code-bg);border:1px solid var(--border-strong);border-radius:12px;
+  box-shadow:var(--shadow);overflow:hidden}
+.console-bar{display:flex;align-items:center;gap:.5rem;padding:.7rem 1rem;
+  background:#111823;border-bottom:1px solid var(--code-border)}
+.console-bar i{width:10px;height:10px;border-radius:50%;flex:none}
+.console-bar i:nth-child(1){background:var(--crit)}
+.console-bar i:nth-child(2){background:var(--warn)}
+.console-bar i:nth-child(3){background:var(--ok)}
+.console-title{margin-left:.5rem;font-family:"JetBrains Mono",monospace;font-size:.74rem;color:var(--code-dim);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.runpill{margin-left:auto;display:inline-flex;align-items:center;gap:.4rem;flex:none;
+  font-family:"JetBrains Mono",monospace;font-size:.64rem;font-weight:600;letter-spacing:.1em;
+  color:var(--ok);border:1px solid var(--ok);border-radius:999px;padding:.12rem .55rem}
+.runpill .dot{width:6px;height:6px;border-radius:50%;background:var(--ok);animation:pulse-dot 1.6s infinite}
+.cline{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:1rem;align-items:start;
+  padding:1.05rem 1.2rem;border-bottom:1px solid var(--code-border)}
+.cline:last-child{border-bottom:none}
+.cl-tag{font-family:"JetBrains Mono",monospace;font-size:.64rem;font-weight:700;letter-spacing:.1em;
+  border-radius:5px;padding:.2rem .5rem;margin-top:.1rem;white-space:nowrap}
+.cl-tag.in{color:#7DD3FC;border:1px solid rgba(125,211,252,.45)}
+.cl-tag.orch{color:#38BDF8;border:1px solid rgba(56,189,248,.45)}
+.cl-tag.out{color:var(--ok);border:1px solid var(--ok)}
+.cl-main{min-width:0}
+.cl-main>b{display:block;font-size:.92rem;font-weight:600;color:var(--text)}
+.cl-line{display:block;margin-top:.25rem;font-family:"JetBrains Mono",monospace;font-size:.76rem;color:var(--code-dim);line-height:1.6}
+.cl-note{display:block;margin-top:.3rem;font-size:.76rem;color:var(--code-dim)}
+.cl-status{width:8px;height:8px;border-radius:50%;background:var(--ok);margin-top:.5rem;flex:none}
+.cl-tools{margin-top:.5rem;display:grid;gap:.5rem}
+.trow2{display:flex;align-items:center;gap:.7rem}
+.trow2 .fn{flex:none;width:8.6rem;font-family:"JetBrains Mono",monospace;font-size:.74rem;color:#7DD3FC}
+.terms{display:flex;gap:4px;flex:1;min-width:0}
+.term{flex:1;max-width:26px;height:10px;border-radius:2px;background:var(--code-border)}
+.term.lit{background:var(--accent);box-shadow:0 0 6px rgba(56,189,248,.55)}
+.term.ghost{opacity:.3;box-shadow:none}
+.guard{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.55rem}
+
+/* ============ 语料账本 ============ */
+.ledger{border:1px solid var(--code-border);border-radius:10px;overflow:hidden;background:var(--code-bg)}
+.lrow{display:grid;grid-template-columns:3.6rem 6.4rem 1fr auto;gap:1rem;align-items:center;
+  padding:.55rem 1.1rem;font-family:"JetBrains Mono",monospace;font-size:.84rem;color:var(--code-text);
+  border-bottom:1px solid var(--code-border)}
+.lrow:last-child{border-bottom:none}
+.lrow:nth-child(even){background:rgba(255,255,255,.02)}
+.lrow .n{color:#55677D}
+.lrow .t{color:#7DD3FC;font-weight:500}
+.lrow .t.obs{color:var(--ok)}
+.lrow .t.rep{color:#E8EFF7;font-weight:600}
+.lrow .holes{display:flex;gap:4px}
+.lrow .holes i{width:5px;height:5px;border-radius:50%;background:#223042}
+.lrow .holes i.on{background:var(--accent)}
+
+/* ============ 机制三模块 ============ */
+.mech{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem}
+.cell-mod{border:1px solid var(--border);border-radius:10px;background:var(--bg-soft);
+  padding:1.3rem 1.4rem 1.5rem;transition:border-color .15s}
+.cell-mod:hover{border-color:var(--accent)}
+.cell-mod h3{font-weight:700;font-size:1.1rem;display:flex;align-items:center;gap:.6rem}
+.cell-mod h3 .dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--ok)}
+.cell-mod p{margin-top:.7rem;font-size:.92rem;line-height:1.7;color:var(--text-2)}
+.sig{margin-top:.9rem;background:var(--code-bg);color:var(--code-text);border:1px solid var(--code-border);
+  border-radius:8px;padding:.8rem .9rem;font-family:"JetBrains Mono",monospace;font-size:.76rem;line-height:1.7;overflow-x:auto}
+.sig .fn{color:#7DD3FC}
+.swap{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.7rem;font-size:.78rem}
+.swap .arr{color:var(--text-3)}
+.audit{margin-top:.8rem;font-family:"JetBrains Mono",monospace;font-size:.74rem;color:var(--text-3);line-height:1.8}
+.audit .deny{color:var(--crit);font-weight:600}
+.audit .pass{color:var(--ok);font-weight:600}
+
+/* ============ 报告 ============ */
+.report-wrap{display:grid;grid-template-columns:minmax(280px,46%) 1fr;gap:1.8rem;align-items:start}
+.doc{background:var(--panel);border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:var(--shadow)}
+.doc-tab{display:flex;align-items:center;gap:.8rem;padding:.7rem 1.1rem;background:var(--panel-hi);
+  border-bottom:1px solid var(--border)}
+.doc-tab .fname{font-family:"JetBrains Mono",monospace;font-size:.74rem;color:var(--text-2);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-tab .pill{margin-left:auto;flex:none}
+.doc-body{padding:1.3rem 1.4rem 1.4rem}
+.doc .sec{margin-top:1rem}
+.doc .sec:first-child{margin-top:0}
+.doc .sec>b{display:flex;align-items:center;gap:.55rem;font-size:.86rem;font-weight:700}
+.doc .sec>b i{font-style:normal;font-family:"JetBrains Mono",monospace;font-size:.68rem;color:var(--accent)}
+.doc .sec p{margin-top:.45rem;font-size:.9rem;color:var(--text-2)}
+.doc .sec ul,.doc .sec ol{margin:.45rem 0 0 1.2rem;font-size:.9rem;color:var(--text-2)}
+.doc .sec li{margin-top:.3rem}
+.doc .meta{margin-top:1.2rem;padding-top:.9rem;border-top:1px dashed var(--border);
+  font-family:"JetBrains Mono",monospace;font-size:.7rem;color:var(--text-3)}
+.report-side h3{font-weight:800;font-size:1.25rem}
+.report-side p{margin-top:.8rem;font-size:.96rem;color:var(--text-2)}
+.report-side .chips{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1.1rem}
+
+/* ============ 评测 ============ */
+.gauges{display:grid;grid-template-columns:repeat(3,1fr);gap:1.2rem}
+.gauge{border:1px solid var(--border);border-radius:10px;padding:1.2rem 1.3rem;background:var(--bg-soft)}
+.gauge .g-h{display:flex;justify-content:space-between;align-items:baseline;font-weight:700;font-size:.95rem}
+.gauge .g-h .en{font-family:"JetBrains Mono",monospace;letter-spacing:.16em;color:var(--text-3);font-size:.66rem;text-transform:uppercase}
+.cells{display:flex;gap:5px;margin-top:.9rem}
+.cells i{flex:1;height:20px;border-radius:3px;background:var(--border)}
+.cells i.on-g{background:var(--ok)}
+.cells i.on-a{background:var(--accent)}
+.cells i.ghost{background:transparent;border:1px dashed var(--border-strong)}
+.gauge .g-note{margin-top:.8rem;font-size:.82rem;color:var(--text-3)}
+.fault-tags{display:flex;gap:.7rem;flex-wrap:wrap;margin-top:1.5rem}
+
+/* ============ 路线 ============ */
+.road{display:grid;grid-template-columns:repeat(6,1fr);gap:1rem;position:relative;padding-top:18px}
+.road::before{content:"";position:absolute;top:9px;left:8.333%;right:8.333%;height:2px;
+  background:var(--border-strong)}
+.mslot{position:relative;border:1px solid var(--border);border-radius:10px;
+  padding:.9rem .9rem 1rem;background:var(--bg-soft)}
+.mslot::before{content:"";position:absolute;top:-15px;left:50%;translate:-50% 0;
+  width:12px;height:12px;border-radius:50%;background:var(--panel);border:2px solid var(--border-strong)}
+.mslot.done::before{background:var(--ok);border-color:var(--ok)}
+.mslot.now{border-color:var(--accent)}
+.mslot.now::before{background:var(--accent);border-color:var(--accent);animation:pulse-ring 2s infinite}
+@keyframes pulse-ring{50%{box-shadow:0 0 0 6px var(--accent-soft)}}
+.mslot.todo{border-style:dashed}
+.mslot.todo::before{background:var(--bg)}
+.mslot .mno{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:1rem;display:flex;align-items:center}
+.mslot .mno::after{margin-left:auto;font-size:.6rem;font-weight:600;letter-spacing:.1em;border-radius:999px;padding:.1rem .5rem}
+.mslot.done .mno::after{content:"DONE";color:var(--ok);border:1px solid var(--ok)}
+.mslot.now .mno::after{content:"NOW";color:var(--accent);border:1px solid var(--accent)}
+.mslot.todo .mno::after{content:"PLAN";color:var(--text-3);border:1px solid var(--border-strong)}
+.mslot .mt{display:block;margin-top:.4rem;font-size:.84rem;font-weight:700}
+.mslot .md{display:block;font-size:.74rem;color:var(--text-3);margin-top:.2rem}
+.later{margin-top:1.2rem;border:1px dashed var(--border-strong);border-radius:10px}
+.later summary{cursor:pointer;padding:.8rem 1.2rem;font-weight:700;list-style:none;display:flex;gap:.7rem;align-items:center;font-size:.92rem}
+.later summary::before{content:"▸";color:var(--accent)}
+.later[open] summary::before{content:"▾"}
+.later .lb{padding:0 1.2rem 1.1rem;color:var(--text-2);font-size:.9rem}
+
+/* ============ 快速开始 ============ */
+.tty{background:var(--code-bg);border-radius:12px;border:1px solid var(--border-strong);box-shadow:var(--shadow);overflow:hidden}
+.tty-bar{display:flex;align-items:center;gap:.5rem;padding:.65rem 1rem;background:#111823;border-bottom:1px solid var(--code-border)}
+.tty-bar i{width:10px;height:10px;border-radius:50%}
+.tty-bar i:nth-child(1){background:var(--crit)}
+.tty-bar i:nth-child(2){background:var(--warn)}
+.tty-bar i:nth-child(3){background:var(--ok)}
+.tty-bar span{margin-left:.5rem;font-family:"JetBrains Mono",monospace;font-size:.74rem;color:var(--code-dim)}
+.tty pre{padding:1.2rem 1.4rem;font-family:"JetBrains Mono",monospace;font-size:.86rem;line-height:1.9;color:var(--code-text);overflow-x:auto}
+.tty .p{color:#7DD3FC}
+.tty .c{color:var(--code-dim)}
+.copybtn{margin-left:auto;background:none;border:1px solid var(--border-strong);color:var(--text-2);border-radius:6px;font-family:"JetBrains Mono",monospace;font-size:.7rem;padding:.25rem .65rem;cursor:pointer}
+.copybtn:hover{color:var(--accent);border-color:var(--accent)}
+
+/* ============ footer ============ */
+footer{margin-top:3rem}
+.foot-plate{display:flex;align-items:center;gap:1.4rem;flex-wrap:wrap;justify-content:space-between;
+  background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:1.1rem 1.6rem}
+.foot-plate b{font-size:1.05rem;letter-spacing:-.01em}
+.foot-plate b .mono{color:var(--accent);font-size:.8rem;font-weight:600}
+.foot-plate nav{display:flex;gap:1.4rem;flex-wrap:wrap;font-size:.86rem;font-weight:500}
+.foot-plate a{text-decoration:none;color:var(--text-2)}
+.foot-plate a:hover{color:var(--accent)}
+.foot-note{padding:1.2rem .2rem 2.4rem;color:var(--text-3);font-size:.8rem;display:flex;gap:1.5rem;flex-wrap:wrap}
+
+/* reveal */
+.reveal{opacity:0;transform:translateY(16px);transition:opacity .55s ease,transform .55s ease}
+html:not(.js) .reveal{opacity:1;transform:none}
+.reveal.in{opacity:1;transform:none}
+html.shot .hero{min-height:0}
+html.shot .reveal{opacity:1;transform:none;transition:none}
+html.shot .mslot.now::before{animation:none}
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  .reveal{opacity:1;transform:none;transition:none}
+  .mslot.now::before,.eyebrow .dot,.runpill .dot{animation:none}
+}
+
+/* ============ 响应 ============ */
+@media (max-width:1080px){
+  .hero{min-height:0}
+  .hero-in{grid-template-columns:minmax(0,1fr);gap:2.2rem}
+  .mech,.gauges{grid-template-columns:1fr}
+  .report-wrap{grid-template-columns:1fr}
+  .road{grid-template-columns:repeat(3,1fr)}
+  .road::before,.mslot::before{display:none}
+}
+@media (max-width:1080px) and (min-width:641px){
+  .mech,.gauges{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:640px){
+  .road{grid-template-columns:repeat(2,1fr)}
+  .module-b{padding:1.3rem 1.1rem 1.5rem}
+  .module-h{padding:.95rem 1.1rem .85rem;flex-wrap:wrap;row-gap:.2rem}
+  .module-h .en{flex-basis:100%;margin-left:0}
+  .cline{grid-template-columns:auto minmax(0,1fr);padding:.9rem .9rem}
+  .cl-status{display:none}
+  .trow2{flex-wrap:wrap}
+  .trow2 .fn{width:auto}
+  .lrow{grid-template-columns:3rem 5.4rem 1fr}
+  .lrow .holes{display:none}
+  .cta-row .btn-primary,.cta-row .btn-ghost{flex:1}
+  .console-title{max-width:14rem}
+  .tty pre{font-size:.78rem}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#main">跳到主要内容</a>
+
+<!-- ================= HERO：排查控制台 ================= -->
+<header class="hero" id="machine" aria-label="Open TAM 排查控制台">
+  <div class="wrap topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">&gt;_</span>
+      <b>Open TAM</b>
+      <span class="brand-sub">SRE Agent</span>
+    </div>
+    <div class="theme-seg" role="group" aria-label="主题">
+      <button class="seg" type="button" data-theme-btn="dark" aria-pressed="true">深色</button>
+      <button class="seg" type="button" data-theme-btn="light" aria-pressed="false">浅色</button>
+    </div>
+  </div>
+
+  <div class="wrap hero-in">
+    <div class="hero-copy">
+      <p class="eyebrow"><span class="dot"></span>SRE Agent · AgentScope + MCP</p>
+      <h1>把 TAM 的排查工作显性化</h1>
+      <p class="sub"><b>新人</b>照着 trace 学排查 · <b>老 TAM</b> 梳理自己的工作 · <b>团队</b>沉淀最佳实践</p>
+      <div class="cta-row">
+        <a class="btn-primary" href="#" data-cta="demo">运行无 Key 演示</a>
+        <a class="btn-ghost" href="#" data-cta="repo">查看源码</a>
+      </div>
+    </div>
+
+    <div class="console">
+      <div class="console-bar">
+        <i></i><i></i><i></i>
+        <span class="console-title">open-tam investigate --alert-file /tmp/alert.json</span>
+        <span class="runpill"><span class="dot"></span>RUNNING</span>
+      </div>
+      <div class="console-body">
+        <div class="cline">
+          <span class="cl-tag in">IN</span>
+          <div class="cl-main">
+            <b>告警接入</b>
+            <span class="cl-line">AlertEvent ← 云监控告警标准化，字段对齐云监控格式</span>
+          </div>
+          <span class="cl-status" aria-hidden="true"></span>
+        </div>
+        <div class="cline">
+          <span class="cl-tag orch">ORCH</span>
+          <div class="cl-main">
+            <b>orchestrator 运维专家</b>
+            <div class="cl-tools">
+              <div class="trow2">
+                <span class="fn">query_metrics</span>
+                <div class="terms" data-terms>
+                  <span class="term"></span><span class="term"></span><span class="term"></span><span class="term"></span>
+                  <span class="term"></span><span class="term"></span><span class="term"></span><span class="term"></span>
+                  <span class="term"></span><span class="term"></span><span class="term"></span><span class="term"></span>
+                </div>
+              </div>
+              <div class="trow2">
+                <span class="fn">query_logs</span>
+                <div class="terms" data-terms>
+                  <span class="term"></span><span class="term"></span><span class="term"></span><span class="term"></span>
+                  <span class="term"></span><span class="term"></span><span class="term"></span><span class="term"></span>
+                  <span class="term"></span><span class="term"></span><span class="term ghost"></span><span class="term ghost"></span>
+                </div>
+              </div>
+            </div>
+            <span class="cl-note">编排只推理，取数全走 MCP；签名固定，mock 与实盘可互换</span>
+            <div class="guard"><span class="tag">护栏 白名单 · dry-run</span></div>
+          </div>
+        </div>
+        <div class="cline">
+          <span class="cl-tag out">OUT</span>
+          <div class="cl-main">
+            <b>根因报告落盘</b>
+            <span class="cl-line">reports/2026-08-28-AL-1024.md · 三段式：结论摘要 / 异常清单 / 建议动作</span>
+          </div>
+          <span class="cl-status" aria-hidden="true"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+<main id="main">
+
+<!-- ================= 01 把工作显性化 ================= -->
+<section class="module reveal" style="margin-top:2.6rem" aria-labelledby="h-visible">
+  <div class="module-h"><span class="no">01</span><h2 id="h-visible">把工作显性化</h2><span class="en">TAM Work, Made Visible</span></div>
+  <div class="module-b">
+    <p class="ledger-note" style="margin-top:0;margin-bottom:1.4rem">告警进来，报告出去——更重要的是：每一次排查都被完整留存。「排查故障」这件原本藏在个人经验里的事，变成可阅读、可评测、可复用的资产。</p>
+    <div class="mech">
+      <div class="cell-mod">
+        <h3><span class="dot"></span>新人 · 照着 trace 学排查</h3>
+        <p>入职不靠口口相传：读一遍完整 trace——思考、工具调用、观察、报告——看一次故障是如何被一步步收敛到根因的。</p>
+        <div class="sig">traces/AL-1024.jsonl<br>thought → tool_call → observation → report</div>
+      </div>
+      <div class="cell-mod">
+        <h3><span class="dot"></span>老 TAM · 梳理自己的工作</h3>
+        <p>排查不再是消失的聊天记录：每次沉淀为三段式报告与 trace 账本；故障模式注册表就是你的工作清单。</p>
+        <div class="sig">reports/&lt;date&gt;-&lt;alert-id&gt;.md<br>cpu_spike · slow_query · oom · pool_exhausted</div>
+      </div>
+      <div class="cell-mod">
+        <h3><span class="dot"></span>团队 · 沉淀最佳实践</h3>
+        <p>trace 回流语料库、沉淀为 Skill；故障注册表同时是评测集——好的排查经验成为可验证、可复制的团队能力。</p>
+        <div class="sig">corpus → skill<br>eval: 命中率 · 平均步数 · token 成本</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 02 排查即语料 ================= -->
+<section class="module reveal" style="margin-top:2.6rem" aria-labelledby="h-corpus">
+  <div class="module-h"><span class="no">02</span><h2 id="h-corpus">排查即语料</h2><span class="en">Traces as Corpus</span></div>
+  <div class="module-b">
+    <div class="ledger" role="table" aria-label="排查 trace 账本（演示数据）">
+      <div class="lrow"><span class="n">001</span><span class="t">thought</span><span>制定排查计划：先确认指标异常，再取日志现场</span><span class="holes"><i class="on"></i><i></i><i class="on"></i><i class="on"></i><i></i></span></div>
+      <div class="lrow"><span class="n">002</span><span class="t">tool_call</span><span>query_metrics(cpu_usage, demo-app, -30m..now)</span><span class="holes"><i class="on"></i><i class="on"></i><i></i><i class="on"></i><i class="on"></i></span></div>
+      <div class="lrow"><span class="n">003</span><span class="t obs">observation</span><span>cpu_usage 92.5% &gt; 阈值 80%，持续 12 分钟</span><span class="holes"><i></i><i class="on"></i><i class="on"></i><i></i><i class="on"></i></span></div>
+      <div class="lrow"><span class="n">004</span><span class="t">tool_call</span><span>query_logs(demo-app, level=ERROR, keyword=slow)</span><span class="holes"><i class="on"></i><i></i><i></i><i class="on"></i><i class="on"></i></span></div>
+      <div class="lrow"><span class="n">005</span><span class="t obs">observation</span><span>slow query detected · duration=2.34s ×47 条</span><span class="holes"><i class="on"></i><i class="on"></i><i class="on"></i><i></i><i></i></span></div>
+      <div class="lrow"><span class="n">006</span><span class="t">thought</span><span>根因判定：慢查询打满 CPU，指标与日志证据闭合</span><span class="holes"><i></i><i class="on"></i><i></i><i class="on"></i><i class="on"></i></span></div>
+      <div class="lrow"><span class="n">007</span><span class="t rep">report</span><span>写出三段式根因报告 → reports/&lt;date&gt;-&lt;alert-id&gt;.md</span><span class="holes"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i></span></div>
+    </div>
+    <p class="ledger-note">每步<b>思考 / 工具调用 / 观察</b>以 JSONL 落盘 <span class="mono">traces/&lt;alert-id&gt;.jsonl</span>——报告与 trace 都是语料资产，可回流语料库、沉淀 Skill。上表为 cpu_spike 演示样例。</p>
+  </div>
+</section>
+
+<!-- ================= 03 机制 ================= -->
+<section class="module reveal" style="margin-top:2.6rem" aria-labelledby="h-mech">
+  <div class="module-h"><span class="no">03</span><h2 id="h-mech">大脑与手脚分离</h2><span class="en">Brain / Hands over MCP</span></div>
+  <div class="module-b">
+    <div class="mech">
+      <div class="cell-mod">
+        <h3><span class="dot"></span>orchestrator 只推理</h3>
+        <p>运维专家 Agent（AgentScope ReAct）：接告警 → 排查计划 → 调度子 Agent → 汇总报告。metric-agent / log-agent 独立协作。</p>
+        <div class="sig">model: <span class="fn">qwen-plus</span> ⇄ <span class="fn">qwen-turbo</span><br>主备自动切换 · 重试退避</div>
+      </div>
+      <div class="cell-mod">
+        <h3><span class="dot"></span>MCP 工具总线</h3>
+        <p>数据获取全部走固定签名的 MCP 工具，mock 与真实后端互换零改动。</p>
+        <div class="sig"><span class="fn">query_metrics</span>(metric, service, start, end)<br><span class="fn">query_logs</span>(service, start, end, level?, keyword?)</div>
+        <div class="swap"><span class="tag">mock-metrics</span><span class="arr">⇄</span><span class="tag">alibabacloud-observability MCP</span></div>
+        <div class="swap"><span class="tag">mock-logs</span><span class="arr">⇄</span><span class="tag">SLS 日志服务</span></div>
+      </div>
+      <div class="cell-mod">
+        <h3><span class="dot"></span>护栏前置</h3>
+        <p>命令白名单 + dry-run 预览 + 敏感操作人工确认，先于自主性。</p>
+        <div class="audit">audit.log<br><span class="deny">DENY</span> rm -rf /data → 白名单外，拒绝并记录<br><span class="pass">PASS</span> restart demo-app → dry-run 预览后人工确认</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 04 根因报告 ================= -->
+<section class="module reveal" style="margin-top:2.6rem" aria-labelledby="h-report">
+  <div class="module-h"><span class="no">04</span><h2 id="h-report">根因报告，三段交付</h2><span class="en">Structured RCA</span></div>
+  <div class="module-b">
+    <div class="report-wrap">
+      <article class="doc">
+        <div class="doc-tab">
+          <span class="fname">reports/2026-08-28-AL-1024.md</span>
+          <span class="pill ok">已定位</span>
+        </div>
+        <div class="doc-body">
+          <div class="sec"><b><i>01</i>结论摘要</b>
+            <p>demo-app CPU 使用率 92.5%（阈值 80%）。根因：订单查询慢查询（duration≈2.3s）打满 CPU，指标与日志证据闭合。</p>
+          </div>
+          <div class="sec"><b><i>02</i>异常清单</b>
+            <ul>
+              <li>cpu_usage 92.5% &gt; 80%，持续 12 分钟</li>
+              <li>ERROR 日志 47 条：slow query detected</li>
+              <li>load_1m 8.34，高于基线 2.7σ</li>
+            </ul>
+          </div>
+          <div class="sec"><b><i>03</i>建议动作</b>
+            <ol>
+              <li>为订单查询补复合索引（dry-run 预览）</li>
+              <li>对慢查询接口限流降级</li>
+              <li>复盘后沉淀为巡检规则</li>
+            </ol>
+          </div>
+          <p class="meta">evidence: traces/AL-1024.jsonl</p>
+        </div>
+      </article>
+      <div class="report-side">
+        <h3>不是聊天记录，是可交付文书</h3>
+        <p>结论摘要、异常清单、建议动作三段结构固定落盘 Markdown；同一份证据链同时进入 trace 语料。故障模式注册表（cpu_spike / slow_query / oom / connection_pool_exhausted）既是演示剧本，也是评测集。</p>
+        <div class="chips">
+          <span class="tag">cpu_spike</span><span class="tag">slow_query</span><span class="tag">oom</span><span class="tag">connection_pool_exhausted</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 05 评测 ================= -->
+<section class="module reveal" style="margin-top:2.6rem" aria-labelledby="h-eval">
+  <div class="module-h"><span class="no">05</span><h2 id="h-eval">评测集即故障注册表</h2><span class="en">Measurable</span></div>
+  <div class="module-b">
+    <div class="gauges">
+      <div class="gauge"><div class="g-h">根因命中率<span class="en">HIT RATE</span></div>
+        <div class="cells"><i class="on-g"></i><i class="on-g"></i><i class="on-g"></i><i class="on-g"></i><i class="on-g"></i><i class="on-g"></i><i class="on-g"></i><i class="ghost"></i><i class="ghost"></i><i class="ghost"></i></div>
+        <p class="g-note">按故障模式逐个跑通，断言报告产出且根因命中。</p></div>
+      <div class="gauge"><div class="g-h">平均步数<span class="en">STEPS</span></div>
+        <div class="cells"><i class="on-a"></i><i class="on-a"></i><i class="on-a"></i><i class="on-a"></i><i class="ghost"></i><i class="ghost"></i><i class="ghost"></i><i class="ghost"></i><i class="ghost"></i><i class="ghost"></i></div>
+        <p class="g-note">最大 15 步 + token 预算双重上限，超限强制收敛。</p></div>
+      <div class="gauge"><div class="g-h">token 成本<span class="en">COST</span></div>
+        <div class="cells"><i class="on-a"></i><i class="on-a"></i><i class="on-a"></i><i class="ghost"></i><i class="ghost"></i><i class="ghost"></i><i class="ghost"></i><i class="ghost"></i><i class="ghost"></i><i class="ghost"></i></div>
+        <p class="g-note">主备模型切换在成本与命中之间取平衡。</p></div>
+    </div>
+    <div class="fault-tags">
+      <span class="tag">已排除项 →</span>
+      <span class="tag off">dns</span><span class="tag off">disk</span><span class="tag off">network</span>
+      <span class="tag off">gc</span>
+    </div>
+    <p class="ledger-note">未点亮的格子也是设计：排查中排除掉的假设，以幽灵格留在面板上。</p>
+  </div>
+</section>
+
+<!-- ================= 06 路线 ================= -->
+<section class="module reveal" style="margin-top:2.6rem" aria-labelledby="h-road">
+  <div class="module-h"><span class="no">06</span><h2 id="h-road">演进路线</h2><span class="en">Roadmap M0–M5</span></div>
+  <div class="module-b">
+    <div class="road">
+      <div class="mslot done"><span class="mno">M0</span><span class="mt">骨架</span><span class="md">CLI + demo-app + mock-metrics</span></div>
+      <div class="mslot done"><span class="mno">M1</span><span class="mt">排查闭环</span><span class="md">ReAct 排查 → 报告落盘</span></div>
+      <div class="mslot now"><span class="mno">M2</span><span class="mt">多 Agent + 语料</span><span class="md">log 子 Agent · trace 落盘</span></div>
+      <div class="mslot todo"><span class="mno">M3</span><span class="mt">护栏 + 巡检</span><span class="md">白名单 / dry-run / 审计</span></div>
+      <div class="mslot todo"><span class="mno">M4</span><span class="mt">Web UI</span><span class="md">FastAPI 单页聊天</span></div>
+      <div class="mslot todo"><span class="mno">M5</span><span class="mt">实盘接入</span><span class="md">云监控 webhook + 可观测 MCP</span></div>
+    </div>
+    <details class="later">
+      <summary>后期演进（按需展开）</summary>
+      <div class="lb">K8sGPT（kind/ACK）→ ACS Agent Sandbox（MicroVM 隔离执行）→ OpenSRE 式评测扩展 → 排查语料回流、沉淀为可复用 Skill。</div>
+    </details>
+  </div>
+</section>
+
+<!-- ================= 07 快速开始 ================= -->
+<section class="module reveal" style="margin-top:2.6rem" aria-labelledby="h-start">
+  <div class="module-h"><span class="no">07</span><h2 id="h-start">三分钟跑通闭环</h2><span class="en">Quick Start</span></div>
+  <div class="module-b">
+    <div class="tty">
+      <div class="tty-bar"><i></i><i></i><i></i><span>open-tam · no-key demo</span><button class="copybtn" id="copybtn" type="button">copy</button></div>
+<pre id="cmds">uv sync
+uv run open-tam fault inject cpu_spike
+uv run open-tam investigate --alert-file /tmp/alert.json --fake
+cat reports/*.md   <span class="c"># 三段式根因报告</span></pre>
+    </div>
+    <p class="ledger-note">无 Key 闭环用 FakeChatModel；换上 <span class="mono">DASHSCOPE_API_KEY</span> 即走 Qwen 真实模型排查。Python 3.12 · uv 管理环境。</p>
+  </div>
+</section>
+
+</main>
+
+<!-- ================= footer ================= -->
+<footer class="reveal">
+  <div class="foot-plate">
+    <b>Open TAM <span class="mono">· SRE AGENT</span></b>
+    <nav aria-label="项目链接">
+      <a href="../docs/architecture.md">架构一页纸</a>
+      <a href="../docs/mvp-plan.md">MVP 清单</a>
+      <a href="../README.md">README</a>
+      <a href="#" data-cta="repo">GitHub</a>
+    </nav>
+  </div>
+  <div class="foot-note">
+    <span>基于 AgentScope + MCP 构建</span>
+    <span>页面演示数据来自仓库内置故障模式，非生产指标</span>
+    <span>CTA 链接为占位，交付时替换</span>
+  </div>
+</footer>
+
+</div>
+
+<script>
+(function(){
+  document.documentElement.classList.add('js');
+  var reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var hash = location.hash || '';
+  if (hash.indexOf('light') !== -1) { document.documentElement.dataset.theme = 'light'; }
+  if (hash.indexOf('shot') !== -1) { document.documentElement.classList.add('shot'); }
+  if (hash.indexOf('measure') !== -1) { document.addEventListener('DOMContentLoaded', function(){ document.title = 'H' + document.documentElement.scrollHeight + '|W' + document.documentElement.scrollWidth + '|I' + innerWidth; }); }
+
+  // 主题切换（深色/浅色）
+  function syncSeg(){
+    var dark = document.documentElement.dataset.theme !== 'light';
+    document.querySelectorAll('[data-theme-btn]').forEach(function(b){
+      b.setAttribute('aria-pressed', String((b.dataset.themeBtn === 'dark') === dark));
+    });
+  }
+  document.querySelectorAll('[data-theme-btn]').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.documentElement.dataset.theme = b.dataset.themeBtn;
+      syncSeg();
+    });
+  });
+  syncSeg();
+
+  // 数据流：工具调用端子依次点亮
+  var flown=false;
+  function flow(){
+    if (flown) return;
+    flown=true;
+    var terms = document.querySelectorAll('[data-terms] .term');
+    if (reduced) { terms.forEach(function(t){t.classList.add('lit')}); return; }
+    terms.forEach(function(t,i){
+      setTimeout(function(){ t.classList.add('lit'); }, 600 + i*70);
+    });
+  }
+  addEventListener('load', flow);
+  document.getElementById('machine').addEventListener('mouseenter', function(){ if(!flown) flow(); });
+
+  // 滚动显现
+  var io = new IntersectionObserver(function(es){
+    es.forEach(function(e){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target);} });
+  },{threshold:.12});
+  document.querySelectorAll('.reveal').forEach(function(el){ io.observe(el); });
+
+  // 复制命令
+  document.getElementById('copybtn').addEventListener('click', function(){
+    var txt = document.getElementById('cmds').innerText.replace(/#.*$/gm,'').trim();
+    navigator.clipboard.writeText(txt).then(function(){
+      var b = document.getElementById('copybtn'); b.textContent = 'copied';
+      setTimeout(function(){ b.textContent = 'copy'; }, 1200);
+    });
+  });
+})();
+</script>
+</body>
+</html>
