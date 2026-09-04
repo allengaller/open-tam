@@ -17,3 +17,6 @@ traces/
 
 # macOS
 .DS_Store
+
+# git worktrees
+.worktrees/
