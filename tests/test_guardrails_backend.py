@@ -18,7 +18,7 @@ class RecordingBackend:
 
 def test_orchestrator_tools_include_execute_action():
     assert [t["name"] for t in ORCHESTRATOR_TOOLS] == [
-        "ask_metric_agent", "ask_log_agent", "execute_action",
+        "ask_metric_agent", "ask_log_agent", "ask_k8s_agent", "execute_action",
     ]
 
 

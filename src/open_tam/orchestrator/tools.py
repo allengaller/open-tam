@@ -43,7 +43,62 @@ QUERY_LOGS_SPEC = {
     },
 }
 
-ALL_TOOLS: list[dict] = [QUERY_METRICS_SPEC, QUERY_LOGS_SPEC]
+QUERY_K8S_EVENTS_SPEC = {
+    "name": "query_k8s_events",
+    "description": "查询 K8s 事件（Pod/Node 相关），用于诊断 K8s 基础设施问题。",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "namespace": {"type": "string", "description": "命名空间"},
+            "pod_name": {"type": "string", "description": "Pod 名称（可选）"},
+            "kind": {"type": "string", "description": "资源类型过滤（可选）"},
+        },
+        "required": ["namespace"],
+    },
+}
+
+QUERY_POD_STATUS_SPEC = {
+    "name": "query_pod_status",
+    "description": "查询 Pod 状态，用于诊断 Pod 异常（CrashLoopBackOff 等）。",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "namespace": {"type": "string", "description": "命名空间"},
+            "pod_name": {"type": "string", "description": "Pod 名称"},
+        },
+        "required": ["namespace", "pod_name"],
+    },
+}
+
+QUERY_NODE_STATUS_SPEC = {
+    "name": "query_node_status",
+    "description": "查询 Node 状态，用于诊断节点异常（NotReady 等）。",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "node_name": {"type": "string", "description": "Node 名称"},
+        },
+        "required": ["node_name"],
+    },
+}
+
+ANALYZE_WITH_K8SGPT_SPEC = {
+    "name": "analyze_with_k8sgpt",
+    "description": "使用 K8sGPT 自动分析 K8s 问题，获取诊断建议。",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "namespace": {"type": "string", "description": "命名空间"},
+            "pod_name": {"type": "string", "description": "Pod 名称（可选）"},
+        },
+        "required": ["namespace"],
+    },
+}
+
+ALL_TOOLS: list[dict] = [
+    QUERY_METRICS_SPEC, QUERY_LOGS_SPEC,
+    QUERY_K8S_EVENTS_SPEC, QUERY_POD_STATUS_SPEC, QUERY_NODE_STATUS_SPEC, ANALYZE_WITH_K8SGPT_SPEC,
+]
 
 
 def query_metrics_inline(metric: str, service: str, start: str, end: str) -> str:
@@ -133,6 +188,9 @@ class McpStdioBackend:
                 return _server_command()
             from open_tam.mcp_servers.logs_server import _server_command as logs_cmd
             return logs_cmd()
+        elif tool_name in ("query_k8s_events", "query_pod_status", "query_node_status", "analyze_with_k8sgpt"):
+            from open_tam.mcp_servers.k8s_server import _server_command
+            return _server_command()
         else:
             if self.metrics_backend == "aliyun":
                 from open_tam.mcp_servers.aliyun_metrics_server import _server_command
@@ -160,6 +218,16 @@ ASK_LOG_AGENT_SPEC = {
     },
 }
 
+ASK_K8S_AGENT_SPEC = {
+    "name": "ask_k8s_agent",
+    "description": "向 K8s 基础设施子 Agent 提问：诊断 Pod/Node/DNS/证书相关问题。",
+    "parameters": {
+        "type": "object",
+        "properties": {"question": {"type": "string", "description": "要诊断的 K8s 问题"}},
+        "required": ["question"],
+    },
+}
+
 EXECUTE_ACTION_SPEC = {
     "name": "execute_action",
     "description": "执行白名单内的运维动作（如 clear_fault 修复故障）。白名单外动作会被拒绝；敏感动作在无人确认场景会被拒绝并写入审计。",
@@ -173,7 +241,9 @@ EXECUTE_ACTION_SPEC = {
     },
 }
 
-ORCHESTRATOR_TOOLS: list[dict] = [ASK_METRIC_AGENT_SPEC, ASK_LOG_AGENT_SPEC, EXECUTE_ACTION_SPEC]
+ORCHESTRATOR_TOOLS: list[dict] = [
+    ASK_METRIC_AGENT_SPEC, ASK_LOG_AGENT_SPEC, ASK_K8S_AGENT_SPEC, EXECUTE_ACTION_SPEC,
+]
 
 
 class GuardrailsBackend:

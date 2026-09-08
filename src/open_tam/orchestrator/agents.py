@@ -6,10 +6,12 @@ from open_tam.orchestrator.loop import ChatModel, ReActLoop
 from open_tam.orchestrator.tools import Backend, InlineBackend
 from open_tam.tracing.trace import TraceRecorder
 
-ORCHESTRATOR_PROMPT = """你是资深 SRE 运维专家（orchestrator）。收到告警后，通过两个子 Agent 排查：
+ORCHESTRATOR_PROMPT = """你是资深 SRE 运维专家（orchestrator）。收到告警后，通过子 Agent 排查：
 - ask_metric_agent(question)：向指标分析子 Agent 提问，确认异常是否存在、异常窗口与幅度；
-- ask_log_agent(question)：向日志检索子 Agent 提问，获取异常现场的日志证据。
-先向指标子 Agent 确认异常，需要现场证据时再询问日志子 Agent；证据足够后定位根因。
+- ask_log_agent(question)：向日志检索子 Agent 提问，获取异常现场的日志证据；
+- ask_k8s_agent(question)：向 K8s 基础设施子 Agent 提问，诊断 Pod/Node/DNS/证书相关问题。
+先向指标子 Agent 确认异常，需要现场证据时再询问日志子 Agent；若告警涉及 K8s 资源（Pod/Node/DNS/证书），委托 K8s 子 Agent 诊断。
+证据足够后定位根因。
 根因确认后可用 execute_action(action, arguments) 执行白名单内修复动作：仅限 safe 级动作（如 clear_fault）；
 敏感动作会被拒绝，应写入 actions 建议人工确认后执行。
 最终**只输出一个 JSON 对象**（可包在 ```json 代码块中）：
@@ -21,6 +23,13 @@ METRIC_AGENT_PROMPT = """你是指标分析子 Agent。用 query_metrics 查询�
 
 LOG_AGENT_PROMPT = """你是日志检索子 Agent。用 query_logs 检索异常现场日志（可按级别 ERROR/WARN 与关键字过滤），提炼与问题直接相关的日志证据。
 完成回答后只输出证据清单文本，每条一行。"""
+
+K8S_AGENT_PROMPT = """你是 Kubernetes 基础设施排障子 Agent。当收到 Pod/Node/DNS/证书相关告警时：
+1. 先用 query_pod_status 或 query_node_status 查询资源状态；
+2. 用 query_k8s_events 查询相关事件；
+3. 用 analyze_with_k8sgpt 获取 K8sGPT 自动分析结果；
+4. 综合所有证据给出诊断结论。
+完成回答后只输出诊断结论文本，包含关键证据。"""
 
 
 class SpecialistAgent:
