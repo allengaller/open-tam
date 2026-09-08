@@ -5,68 +5,134 @@
 ## 架构图
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph 入口层
-        CLI[CLI]
-        WH[云监控 Webhook<br/>M5]
-        AR[alert-receiver<br/>AlertEvent 标准化]
+        CLI[CLI · Typer]
+        WH[云监控 Webhook<br/>POST /alerts · M5]
+        AM[AlertManager Webhook<br/>M5]
+        AR[alert-receiver<br/>AlertEvent 标准化<br/>云监控字段别名自动映射]
+        DD[告警去重器<br/>滑动窗口 · M5]
+        SC[告警关联聚合<br/>时间窗口+服务重叠 · M10]
+        PQ[优先级队列<br/>P0 抢占 · M10]
         CLI --> AR
         WH --> AR
+        AM --> AR
+        AR --> DD
+        DD --> SC
+        SC --> PQ
     end
 
-    subgraph 编排层 AgentScope
-        ORC[orchestrator<br/>运维专家 ReActAgent]
-        MA[metric-agent<br/>M2 子 Agent 化]
-        LA[log-agent<br/>M2 子 Agent 化]
+    subgraph 编排层
+        ORC[Orchestrator<br/>手写 ReActLoop<br/>think → act → observe<br/>max_steps + char_budget 双预算]
+        MA[Metric-Agent<br/>SpecialistAgent<br/>独立 prompt + 工具 + trace]
+        LA[Log-Agent<br/>SpecialistAgent<br/>独立 prompt + 工具 + trace]
+        KA[K8s-Agent<br/>SpecialistAgent · M8<br/>K8sGPT 诊断]
+        SK[Skill 注入<br/>M6 先验知识]
+        ORC -- ask_metric_agent --> MA
+        ORC -- ask_log_agent --> LA
+        ORC -- ask_k8s_agent --> KA
+        ORC -- execute_action --> GR
+        SK -.system prompt.-> ORC
     end
 
-    subgraph MCP 工具总线
-        MM[mock-metrics-mcp-server]
-        ML[mock-logs-mcp-server]
-        ALI[alibabacloud-observability<br/>MCP M5 替换接入]
-        K8S[K8sGPT MCP<br/>后期接入]
+    subgraph 护栏层
+        GR[Guardrails 引擎<br/>白名单 → 参数校验 → dry-run<br/>→ 敏感操作确认 → 执行]
+        AUD[AuditLogger<br/>var/audit.log · JSONL<br/>每条决策逐落]
+        PB[Playbook 执行器<br/>M10 多步修复]
+        GR --> AUD
+        GR --> PB
     end
 
     subgraph 模型层
-        LLM[DashScope Qwen<br/>主备自动切换]
+        LLM[AgentScope ChatModel<br/>DashScope Qwen 主备切换<br/>消息/工具格式自动转换<br/>FakeChatModel 无 Key 替身]
+        JUDGE[LLM-as-Judge<br/>M9 评测评分]
+        ORC --> LLM
+        MA --> LLM
+        LA --> LLM
+        KA --> LLM
+        JUDGE -.评估报告.-> ORC
     end
+
+    subgraph MCP 工具总线
+        direction LR
+        IB[InlineBackend<br/>直连本地 mock 函数]
+        MCP[McpStdioBackend<br/>stdio 子进程<br/>MCP 协议标准调用]
+        MM[mock-metrics<br/>FastMCP Server]
+        ML[mock-logs<br/>FastMCP Server]
+        ALI[alibabacloud-observability<br/>M5 替换接入]
+        SLS[SLS 日志服务<br/>M5 替换接入]
+        K8S[K8sGPT MCP<br/>M8 接入]
+        SB[ACS Sandbox<br/>M8 可选]
+        IB --> MM
+        IB --> ML
+        MCP --> MM
+        MCP --> ML
+        MCP -.M5.-> ALI
+        MCP -.M5.-> SLS
+        MCP -.M8.-> K8S
+        MCP -.M8.-> SB
+    end
+
+    MA --> IB
+    LA --> IB
+    KA --> MCP
 
     subgraph 输出层
-        REP[reports/*.md<br/>结论摘要+异常清单+建议动作]
-        TRC[traces/*.jsonl<br/>排查语料]
-        AUD[audit.log<br/>护栏审计]
+        REP[reports/*.md<br/>三段式根因报告<br/>结论摘要 · 异常清单 · 建议动作]
+        TRC[traces/*.jsonl<br/>排查语料<br/>alert_received · tool_call<br/>observation · final]
+        PAT[patrol-*.md<br/>阈值巡检报告<br/>4 故障模式 × 窗口峰值]
+        DB[(SQLite<br/>M7 持久化)]
+        SKD[skills/*.yaml<br/>M6 知识库]
     end
 
-    AR --> ORC
-    ORC --> MM
-    ORC --> ML
-    MA --> MM
-    LA --> ML
-    ORC -.M5 替换.-> ALI
-    ORC -.后期.-> K8S
-    ORC --> LLM
+    subgraph 通知层
+        NT[通知调度器 · M7]
+        DT[钉钉]
+        FS[飞书]
+        SL[Slack]
+        NT --> DT
+        NT --> FS
+        NT --> SL
+    end
+
     ORC --> REP
     ORC --> TRC
-    GR[guardrails<br/>白名单/dry-run/审计] --> ORC
-    GR --> AUD
+    ORC --> DB
+    MA --> TRC
+    LA --> TRC
+    KA --> TRC
+    GR -.审计.-> AUD
+    TRC -.M6 提取.-> SKD
+    NT -.排查完成/敏感确认.-> ORC
 ```
 
 ## 核心设计原则
 
-1. **MCP 工具总线统一接口**：`query_metrics` / `query_logs` 签名固定，mock 与真实后端（alibabacloud-observability MCP）可互换，排查代码零改动。
+1. **MCP 工具总线统一接口**：`query_metrics` / `query_logs` 签名固定，mock 与真实后端（alibabacloud-observability MCP / SLS）可互换，排查代码零改动。
 2. **大脑与手脚分离**：编排层只做推理与调度，数据获取全部走 MCP；后期高危命令执行迁入 ACS Agent Sandbox。
 3. **排查即语料**：每步思考/工具调用/观察落 JSONL，报告与 trace 都可回流语料库、沉淀 Skill。
 4. **护栏前置**：命令白名单 + dry-run + 敏感操作人工确认，M3 起生效。
+5. **Skill 反哺**（M6 起）：历史排查经验提取为 Skill，注入 system prompt 作为先验知识，不限制 LLM 自由度。
+
+> 分层说明：ReAct 排查循环自研（`orchestrator/loop.py`）；AgentScope 仅用于模型接入（`orchestrator/llm.py`），负责 DashScope 调用、主备切换与消息/工具格式转换。
 
 ## 替换路径（mock → 实盘）
 
-| MVP 阶段 | 后期替换为 |
-|---|---|
-| mock-metrics-mcp-server | alibabacloud-observability MCP（云监控指标） |
-| mock-logs-mcp-server | SLS 日志服务（同 MCP 框架接入） |
-| 本地白名单沙箱 | ACS Agent Sandbox（MicroVM 隔离） |
-| 云监控 Webhook（M5 起） | 真实告警源 |
+| MVP 阶段 | 后期替换为 | 接入里程碑 |
+|---|---|---|
+| mock-metrics-mcp-server | alibabacloud-observability MCP（云监控指标） | M5 |
+| mock-logs-mcp-server | SLS 日志服务（同 MCP 框架接入） | M5 |
+| 本地白名单沙箱 | ACS Agent Sandbox（MicroVM 隔离） | M8 |
+| 云监控 Webhook（M5 起） | 真实告警源 | M5 |
+| JSON 文件存储 | SQLite → PostgreSQL | M7 |
+| 无 Skill 系统 | trace → Skill → system prompt 注入 | M6 |
+| 单 Agent 排障 | + k8s-agent（K8sGPT） | M8 |
+| 手动评测 | LLM-as-Judge + A/B 对比 + CI 集成 | M9 |
+| 串行排查 | 告警关联聚合 + 优先级队列 | M10 |
+| 单步动作 | 修复 Playbook 多步编排 | M10 |
 
 ## 演进路线
 
-M0 骨架 → M1 排查闭环 → M2 多 Agent + 语料落盘 → M3 护栏 + 巡检 → M4 Web UI → M5 实盘接入 →（K8sGPT · ACS Sandbox · OpenSRE 式评测）
+M0 骨架 → M1 排查闭环 → M2 多 Agent + 语料落盘 → M3 护栏 + 巡检 → M4 Web UI → M5 实盘接入 → M6 知识沉淀与 Skill 系统 → M7 多租户与生产化 → M8 K8s 与基础设施排障 → M9 高级评测与质量闭环 → M10 告警风暴与高级编排
+
+> 全阶段详细设计见 `docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md`

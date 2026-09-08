@@ -37,20 +37,78 @@
 
 ## M4 Web UI
 
-- [ ] FastAPI 服务 + 单页聊天界面
-- [ ] 排查过程流式展示（步骤/工具调用实时可见）
-- **验收**：浏览器发起排查并看到流式过程
+- [x] FastAPI 服务 + 单页聊天界面
+- [x] 排查过程流式展示（步骤/工具调用实时可见）
+- [x] SSE 流式推送 + InvestigationHub 会话注册表
+- [x] `open-tam serve` 命令
+- [x] 故障模板快捷入口 + fake 开关
+- **验收**：浏览器发起排查并看到流式过程 ✅（2026-08-31，feat/m4-web-ui 分支 10 commits，107 tests green，SSE + 单页聊天 + 故障模板 + 流式时间线完整实现）
 
 ## M5 实盘接入
 
-- [ ] 云监控 webhook 告警接入
-- [ ] alibabacloud-observability MCP 替换 mock 后端
-- [ ] （可选）K8sGPT + kind 集群排障
-- [ ] （可选）ACS Agent Sandbox 隔离执行
+> 详细设计见 `docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md` §M5
+
+- [ ] 云监控 webhook 告警接入（签名验证 + 多格式适配 + 去重）
+- [ ] alibabacloud-observability MCP 替换 mock-metrics 后端
+- [ ] SLS 日志服务替换 mock-logs 后端
+- [ ] 后端切换配置（metrics_backend / logs_backend）
 - **验收**：一条真实告警跑通完整闭环
+
+## M6 知识沉淀与 Skill 系统
+
+> 详细设计见 `docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md` §M6
+
+- [ ] `open-tam skill learn` 从 trace 中提取排查模板
+- [ ] Skill YAML 存储 + 匹配 + 注入 ReAct system prompt
+- [ ] `open-tam skill list/create/delete/show` 管理命令
+- [ ] Web UI 知识库标签页
+- **验收**：历史排查经验被自动提取为 Skill，新排查时 Skill 被加载并影响排查路径
+
+## M7 多租户与生产化
+
+> 详细设计见 `docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md` §M7
+
+- [ ] SQLite 持久化层（替代 JSON 文件）
+- [ ] API Key 认证 + 角色权限（admin / operator / viewer）
+- [ ] 通知集成（钉钉 / 飞书 / Slack webhook）
+- [ ] 排查历史持久化 + 检索 API
+- [ ] Web UI 登录 + 历史列表 + 敏感操作 Web 确认
+- **验收**：多用户通过认证访问 Web UI，排查历史持久化可检索
+
+## M8 K8s 与基础设施排障
+
+> 详细设计见 `docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md` §M8
+
+- [ ] K8sGPT MCP 接入
+- [ ] `k8s-agent` 子 Agent（与 metric/log-agent 并列）
+- [ ] 新故障模式：pod_crash_loop / node_not_ready / dns_failure / cert_expiry
+- [ ] （可选）ACS Agent Sandbox 隔离执行
+- **验收**：Pod CrashLoopBackOff 告警触发 k8s-agent 诊断，产出包含 Pod 事件与日志的根因报告
+
+## M9 高级评测与质量闭环
+
+> 详细设计见 `docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md` §M9
+
+- [ ] 多维度评测：根因命中 + 证据充分性 + 误报率 + 排查效率
+- [ ] LLM-as-Judge 证据充分性评分
+- [ ] A/B 模型对比评测（`open-tam eval --compare`）
+- [ ] CI 集成回归评测（`--min-hit-rate` 阈值）
+- [ ] Web UI 评测标签页（趋势图 + 详情）
+- **验收**：CI 每次 PR 自动跑评测，命中率低于阈值告警
+
+## M10 告警风暴与高级编排
+
+> 详细设计见 `docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md` §M10
+
+- [ ] 告警关联聚合（时间窗口 + 服务重叠 + 指标相关性）
+- [ ] 优先级排查队列（P0 抢占 P2）
+- [ ] 修复 Playbook 编排（YAML 定义 + 护栏逐条执行）
+- [ ] 跨集群/跨区域排查
+- **验收**：10 条关联告警聚合为 1 个排查任务；Playbook 自动执行 3 步修复
 
 ## 行为评测（随 M2 起持续）
 
 - 评测集 = 故障模式注册表
-- 指标：根因命中率 / 平均步数 / token 成本
+- 指标：根因命中率 / 证据充分性 / 平均步数 / token 成本 / 误报率
 - 对标 OpenSRE 的 Planner + Sub-Agent 评估思路
+- M9 起：LLM-as-Judge + A/B 对比 + CI 集成
