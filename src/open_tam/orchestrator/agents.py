@@ -34,7 +34,7 @@ class SpecialistAgent:
         model: ChatModel,
         backend: Backend | None = None,
         max_steps: int = 5,
-        trace: "TraceRecorder | None" = None,
+        trace: TraceRecorder | None = None,
     ) -> None:
         self.name = name
         self.system_prompt = system_prompt

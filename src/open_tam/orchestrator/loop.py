@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -151,22 +150,32 @@ class ReActLoop:
         )
 
     @staticmethod
-    def _finalize(alert_id: str, content: str, steps: list[Step]) -> DiagnosisResult:
-        match = re.search(r"\{.*\}", content, re.DOTALL)
-        if match:
+    def _extract_json(content: str) -> dict | None:
+        decoder = json.JSONDecoder()
+        start = content.find("{")
+        while start != -1:
             try:
-                data = json.loads(match.group(0))
-                return DiagnosisResult(
-                    alert_id=alert_id,
-                    root_cause=data.get("root_cause"),
-                    evidence=list(data.get("evidence", [])),
-                    actions=list(data.get("actions", [])),
-                    confidence=str(data.get("confidence", "low")),
-                    excluded=list(data.get("excluded", [])),
-                    steps=steps, raw_final=content,
-                )
+                data, _ = decoder.raw_decode(content[start:])
+                if isinstance(data, dict):
+                    return data
             except json.JSONDecodeError:
                 pass
+            start = content.find("{", start + 1)
+        return None
+
+    @classmethod
+    def _finalize(cls, alert_id: str, content: str, steps: list[Step]) -> DiagnosisResult:
+        data = cls._extract_json(content)
+        if data is not None:
+            return DiagnosisResult(
+                alert_id=alert_id,
+                root_cause=data.get("root_cause"),
+                evidence=list(data.get("evidence", [])),
+                actions=list(data.get("actions", [])),
+                confidence=str(data.get("confidence", "low")),
+                excluded=list(data.get("excluded", [])),
+                steps=steps, raw_final=content,
+            )
         return DiagnosisResult(
             alert_id=alert_id, root_cause=content, evidence=[], actions=[],
             confidence="low", excluded=[], steps=steps, raw_final=content,

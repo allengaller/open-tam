@@ -8,9 +8,9 @@ from typing import Protocol
 
 from open_tam.faults import FaultState
 from open_tam.guardrails import Guardrails
-from open_tam.timeutil import parse_iso_local
 from open_tam.mock.logs_data import generate_logs
 from open_tam.mock.metrics_data import generate_series
+from open_tam.timeutil import parse_iso_local
 
 QUERY_METRICS_SPEC = {
     "name": "query_metrics",

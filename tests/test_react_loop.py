@@ -10,7 +10,6 @@ from open_tam.orchestrator.loop import (
     ReActLoop,
     ToolCall,
 )
-from open_tam.orchestrator.tools import InlineBackend
 
 
 @pytest.fixture(autouse=True)
@@ -28,8 +27,8 @@ def _alert() -> AlertEvent:
 
 def _final_json(cause: str) -> str:
     return (
-        '```json\n{"root_cause": "%s", "evidence": ["cpu_usage 达到 92"], '
-        '"actions": ["回滚发布"], "confidence": "high"}\n```' % cause
+        '```json\n{"root_cause": "' + cause + '", "evidence": ["cpu_usage 达到 92"], '
+        '"actions": ["回滚发布"], "confidence": "high"}\n```'
     )
 
 
@@ -85,6 +84,25 @@ def test_unparseable_final_falls_back_to_low_confidence():
     result = ReActLoop(model=model).run(_alert())
     assert "正则" in (result.root_cause or "")
     assert result.confidence == "low"
+
+
+def test_finalize_ignores_trailing_prose_with_braces():
+    content = (
+        '{"root_cause": "低效正则导致 CPU 飙升", "evidence": [], "actions": [], '
+        '"confidence": "high"}\n备注：{这是非 JSON 的大括号文本}'
+    )
+    model = FakeChatModel([ModelReply(content=content, tool_calls=[])])
+    result = ReActLoop(model=model).run(_alert())
+    assert result.root_cause == "低效正则导致 CPU 飙升"
+    assert result.confidence == "high"
+
+
+def test_finalize_takes_first_json_when_multiple_objects():
+    content = '{"root_cause": "首个结论", "confidence": "medium"} {"root_cause": "干扰项"}'
+    model = FakeChatModel([ModelReply(content=content, tool_calls=[])])
+    result = ReActLoop(model=model).run(_alert())
+    assert result.root_cause == "首个结论"
+    assert result.confidence == "medium"
 
 
 def test_tool_error_becomes_observation_not_crash():

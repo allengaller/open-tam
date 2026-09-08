@@ -1,16 +1,13 @@
 from __future__ import annotations
 
 import json
-import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 import typer
 
 from open_tam.faults import FAULT_MODES, FaultState
 from open_tam.orchestrator.tools import (
-    QUERY_LOGS_SPEC,
-    QUERY_METRICS_SPEC,
     InlineBackend,
     McpStdioBackend,
 )
@@ -132,7 +129,12 @@ def action_run(
 ) -> None:
     from open_tam.actions import ACTION_REGISTRY
     from open_tam.config import Settings
-    from open_tam.guardrails import AuditLogger, AutoApprove, Guardrails, InteractiveConfirmer
+    from open_tam.guardrails import (
+        AuditLogger,
+        AutoApprove,
+        Guardrails,
+        InteractiveConfirmer,
+    )
 
     settings = Settings.load()
     arguments: dict[str, str] = {}
@@ -225,6 +227,33 @@ def serve(
 
     typer.echo(f"open-tam web ui: http://{host}:{port}")
     uvicorn.run(create_app(), host=host, port=port)
+
+
+@app.command("eval")
+def eval_cmd(
+    fake: bool = typer.Option(
+        False, help="使用故障感知的脚本模型（仅验证评测链路，不代表模型质量）"),
+    faults: str = typer.Option(None, help="逗号分隔的故障名，默认全部，见 open-tam fault list"),
+    runs: int = typer.Option(1, min=1, help="每种故障运行次数"),
+) -> None:
+    """遍历故障模式跑排查闭环，产出根因定位率/关键词命中率/平均步数评测报告。"""
+    from open_tam.config import Settings
+    from open_tam.eval import run_eval, write_eval_report
+
+    settings = Settings.load()
+    names = [n.strip() for n in faults.split(",") if n.strip()] if faults else list(FAULT_MODES)
+    unknown = [n for n in names if n not in FAULT_MODES]
+    if unknown:
+        typer.echo(
+            f"未知故障模式: {', '.join(unknown)}（可选: {', '.join(FAULT_MODES)}）", err=True)
+        raise typer.Exit(1)
+    report = run_eval(names, settings=settings, runs=runs, fake=fake)
+    path = write_eval_report(report, settings.reports_dir)
+    typer.echo(f"model: {report.model_label}")
+    typer.echo(
+        f"根因定位率 {report.located_rate:.0%} | 关键词命中率 {report.hit_rate:.0%}"
+        f" | 平均步数 {report.avg_steps:.1f} | 平均耗时 {report.avg_elapsed_s:.1f}s")
+    typer.echo(f"eval report: {path}")
 
 
 @app.command("version")

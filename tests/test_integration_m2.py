@@ -15,7 +15,11 @@ from open_tam.orchestrator.loop import (
     ReActLoop,
     ToolCall,
 )
-from open_tam.orchestrator.tools import ORCHESTRATOR_TOOLS, QUERY_LOGS_SPEC, QUERY_METRICS_SPEC
+from open_tam.orchestrator.tools import (
+    ORCHESTRATOR_TOOLS,
+    QUERY_LOGS_SPEC,
+    QUERY_METRICS_SPEC,
+)
 from open_tam.reporting.report import save_report
 from open_tam.tracing.trace import TraceRecorder, load_trace
 

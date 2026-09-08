@@ -20,3 +20,11 @@ traces/
 
 # git worktrees
 .worktrees/
+
+# 设计工具工作产物（本地保留，不入库）
+.impeccable/
+.hallmark/
+vibe_images/
+
+# AI CLI 工具目录
+.qoder/

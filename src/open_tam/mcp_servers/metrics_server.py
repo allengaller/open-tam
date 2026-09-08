@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 import sys
-from datetime import datetime
 
 from mcp.server.fastmcp import FastMCP
 
 from open_tam.faults import FaultState
-from open_tam.timeutil import parse_iso_local
 from open_tam.mock.metrics_data import generate_series
+from open_tam.timeutil import parse_iso_local
 
 mcp = FastMCP("mock-metrics")
 

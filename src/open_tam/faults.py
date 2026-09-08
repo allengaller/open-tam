@@ -21,6 +21,7 @@ class FaultMode:
     root_cause: str
     remediation: str
     log_signature: str = ""
+    eval_keywords: tuple[str, ...] = ()  # 评测命中判定：根因文本应包含的关键词
 
 
 FAULT_MODES: dict[str, FaultMode] = {
@@ -35,6 +36,7 @@ FAULT_MODES: dict[str, FaultMode] = {
         root_cause="demo-app /search 接口新版本引入低效正则回溯，导致 CPU 飙升",
         remediation="回滚 demo-app 最近一次发布，并优化 /search 的正则匹配逻辑",
         log_signature="WARN CPU usage above 85% for 60s on demo-app",
+        eval_keywords=("正则", "cpu"),
     ),
     "slow_query": FaultMode(
         name="slow_query",
@@ -47,6 +49,7 @@ FAULT_MODES: dict[str, FaultMode] = {
         root_cause="/orders 接口新增 SQL 未命中索引，全表扫描导致慢查询",
         remediation="为 orders(user_id, created_at) 建立联合索引，并回滚未加索引的临时 SQL",
         log_signature="Slow query detected: SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC took 3241ms",
+        eval_keywords=("索引", "全表扫描"),
     ),
     "oom": FaultMode(
         name="oom",
@@ -59,6 +62,7 @@ FAULT_MODES: dict[str, FaultMode] = {
         root_cause="本地缓存无淘汰策略，对象持续累积导致容器 OOMKilled",
         remediation="为本地缓存增加 TTL 与最大条数上限，临时将内存扩容至 2Gi 并重启",
         log_signature="java.lang.OutOfMemoryError: Java heap space — container will be OOMKilled",
+        eval_keywords=("缓存",),
     ),
     "connection_pool_exhausted": FaultMode(
         name="connection_pool_exhausted",
@@ -71,6 +75,7 @@ FAULT_MODES: dict[str, FaultMode] = {
         root_cause="慢事务长期占用数据库连接未释放，连接池耗尽后新请求超时",
         remediation="缩短事务边界并为查询设置 statement timeout，临时重启应用释放连接",
         log_signature="HikariPool-1 - Connection is not available, request timed out after 30000ms",
+        eval_keywords=("连接池", "连接"),
     ),
 }
 

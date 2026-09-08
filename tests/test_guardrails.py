@@ -27,7 +27,11 @@ def make_guard(tmp_path: Path, confirmer=None) -> tuple[Guardrails, Path]:
 
 
 def read_audit(path: Path) -> list[dict]:
-    return [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
 
 
 def test_unknown_action_denied_and_audited(tmp_path):

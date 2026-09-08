@@ -1,4 +1,6 @@
+import asyncio
 import os
+import time
 
 import pytest
 
@@ -28,6 +30,31 @@ def test_both_models_failing_raises(monkeypatch):
     monkeypatch.setattr(model, "_call_via_agentscope", always_fail)
     with pytest.raises(RuntimeError):
         model.complete([{"role": "user", "content": "hi"}], tools=[])
+
+
+def test_primary_timeout_falls_back(monkeypatch):
+    model = AgentScopeChatModel(
+        primary="slow", fallback="fast", api_key="test", timeout=0.1
+    )
+
+    async def acall(name, messages, tools):
+        if name == "slow":
+            await asyncio.sleep(3)
+        return ModelReply(content=f'{{"root_cause": "reply-from-{name}"}}', tool_calls=[])
+
+    monkeypatch.setattr(model, "_acall", acall)
+    start = time.monotonic()
+    reply = model.complete([{"role": "user", "content": "hi"}], tools=[])
+    elapsed = time.monotonic() - start
+    assert reply.content and "reply-from-fast" in reply.content
+    assert elapsed < 2.5  # 无超时会等满 3s
+
+
+def test_settings_model_timeout_from_env(monkeypatch):
+    from open_tam.config import Settings
+
+    monkeypatch.setenv("OPEN_TAM_MODEL_TIMEOUT", "30")
+    assert Settings.load().model_timeout == 30.0
 
 
 @pytest.mark.skipif(not os.environ.get("DASHSCOPE_API_KEY"), reason="需要 DASHSCOPE_API_KEY")
