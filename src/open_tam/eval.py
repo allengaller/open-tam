@@ -21,6 +21,7 @@ class EvalRun:
     confidence: str
     steps: int
     elapsed_s: float
+    evidence_sufficiency: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -47,6 +48,13 @@ class EvalReport:
     @property
     def avg_elapsed_s(self) -> float:
         return sum(r.elapsed_s for r in self.runs) / self.total if self.total else 0.0
+
+    @property
+    def avg_evidence_sufficiency(self) -> float:
+        return sum(r.evidence_sufficiency for r in self.runs) / self.total if self.total else 0.0
+
+    def check_min_hit_rate(self, min_rate: float) -> bool:
+        return self.hit_rate >= min_rate
 
 
 def alert_for(mode: FaultMode) -> AlertEvent:
@@ -125,17 +133,18 @@ def write_eval_report(report: EvalReport, reports_dir: Path) -> Path:
         f"- 样本数: {report.total}（故障模式 × 运行次数）",
         f"- 根因定位率: {report.located_rate:.0%}",
         f"- 关键词命中率: {report.hit_rate:.0%}",
+        f"- 证据充分性: {report.avg_evidence_sufficiency:.2f}",
         f"- 平均步数: {report.avg_steps:.1f}",
         f"- 平均耗时: {report.avg_elapsed_s:.1f}s",
         "",
-        "| 故障 | 根因 | 命中 | 置信度 | 步数 | 耗时s |",
-        "|---|---|---|---|---|---|",
+        "| 故障 | 根因 | 命中 | 证据分 | 置信度 | 步数 | 耗时s |",
+        "|---|---|---|---|---|---|---|",
     ]
     for r in report.runs:
         cause = (r.root_cause or "未定位").replace("|", "\\|").replace("\n", " ")
         mark = "✓" if r.keyword_hit else "✗"
         lines.append(
-            f"| {r.fault} | {cause} | {mark} | {r.confidence} | {r.steps} | {r.elapsed_s:.1f} |"
+            f"| {r.fault} | {cause} | {mark} | {r.evidence_sufficiency:.2f} | {r.confidence} | {r.steps} | {r.elapsed_s:.1f} |"
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path

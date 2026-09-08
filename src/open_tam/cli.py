@@ -235,6 +235,7 @@ def eval_cmd(
         False, help="使用故障感知的脚本模型（仅验证评测链路，不代表模型质量）"),
     faults: str = typer.Option(None, help="逗号分隔的故障名，默认全部，见 open-tam fault list"),
     runs: int = typer.Option(1, min=1, help="每种故障运行次数"),
+    min_hit_rate: float = typer.Option(None, help="最低命中率阈值（0-1），低于时退出码 1（CI 集成）"),
 ) -> None:
     """遍历故障模式跑排查闭环，产出根因定位率/关键词命中率/平均步数评测报告。"""
     from open_tam.config import Settings
@@ -252,8 +253,35 @@ def eval_cmd(
     typer.echo(f"model: {report.model_label}")
     typer.echo(
         f"根因定位率 {report.located_rate:.0%} | 关键词命中率 {report.hit_rate:.0%}"
+        f" | 证据充分性 {report.avg_evidence_sufficiency:.2f}"
         f" | 平均步数 {report.avg_steps:.1f} | 平均耗时 {report.avg_elapsed_s:.1f}s")
     typer.echo(f"eval report: {path}")
+
+    if min_hit_rate is not None and not report.check_min_hit_rate(min_hit_rate):
+        typer.echo(
+            f"FAIL: 命中率 {report.hit_rate:.0%} < 阈值 {min_hit_rate:.0%}", err=True)
+        raise typer.Exit(1)
+
+
+@app.command("eval-compare")
+def eval_compare_cmd(
+    models: str = typer.Option(..., help="逗号分隔的模型名，如 qwen-plus,qwen-max"),
+    faults: str = typer.Option(None, help="逗号分隔的故障名，默认全部"),
+    runs: int = typer.Option(1, min=1, help="每种故障运行次数"),
+    fake: bool = typer.Option(True, help="使用脚本模型（默认 true）"),
+) -> None:
+    """A/B 模型对比评测。"""
+    from open_tam.config import Settings
+    from open_tam.eval_compare import run_compare, write_compare_report
+
+    settings = Settings.load()
+    model_labels = [m.strip() for m in models.split(",") if m.strip()]
+    names = [n.strip() for n in faults.split(",") if n.strip()] if faults else list(FAULT_MODES)
+    report = run_compare(names, model_labels, settings=settings, runs=runs, fake=fake)
+    path = write_compare_report(report, settings.reports_dir)
+    for r in report.results:
+        typer.echo(f"  {r.model_label}: 命中率 {r.report.hit_rate:.0%} | 步数 {r.report.avg_steps:.1f}")
+    typer.echo(f"compare report: {path}")
 
 
 @app.command("version")
