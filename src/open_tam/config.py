@@ -26,6 +26,12 @@ class Settings:
     dedup_window_seconds: int
     webhook_secret: str
     skills_dir: Path
+    database_url: str
+    auth_enabled: bool
+    auth_secret: str
+    notify_dingtalk_webhook: str
+    notify_feishu_webhook: str
+    notify_slack_webhook: str
 
     @classmethod
     def load(cls) -> Settings:
@@ -50,4 +56,10 @@ class Settings:
             dedup_window_seconds=int(os.environ.get("OPEN_TAM_DEDUP_WINDOW_SECONDS", "300")),
             webhook_secret=os.environ.get("OPEN_TAM_WEBHOOK_SECRET", ""),
             skills_dir=Path(os.environ.get("OPEN_TAM_SKILLS_DIR", base / "skills")),
+            database_url=os.environ.get("OPEN_TAM_DATABASE_URL", f"sqlite:///{base / 'var' / 'open_tam.db'}"),
+            auth_enabled=os.environ.get("OPEN_TAM_AUTH_ENABLED", "false").lower() == "true",
+            auth_secret=os.environ.get("OPEN_TAM_AUTH_SECRET", ""),
+            notify_dingtalk_webhook=os.environ.get("OPEN_TAM_NOTIFY_DINGTALK_WEBHOOK", ""),
+            notify_feishu_webhook=os.environ.get("OPEN_TAM_NOTIFY_FEISHU_WEBHOOK", ""),
+            notify_slack_webhook=os.environ.get("OPEN_TAM_NOTIFY_SLACK_WEBHOOK", ""),
         )

@@ -372,3 +372,148 @@ def skill_delete(skill_id: str) -> None:
 
 if __name__ == "__main__":
     main()
+
+
+user_app = typer.Typer(help="用户管理（创建/列出/删除）")
+app.add_typer(user_app, name="user")
+
+
+@user_app.command("create")
+def user_create(
+    username: str = typer.Argument(...),
+    role: str = typer.Option("viewer", help="角色: admin/operator/viewer"),
+) -> None:
+    """创建用户并输出 API Key。"""
+    from datetime import datetime
+    import uuid
+
+    from open_tam.auth.apikey import generate_api_key, hash_api_key
+    from open_tam.config import Settings
+    from open_tam.persistence.database import get_database
+    from open_tam.persistence.repositories import UserRecord, UserRepository
+
+    settings = Settings.load()
+    db_path = settings.database_url.replace("sqlite:///", "")
+    db = get_database(db_path)
+    user_repo = UserRepository(db)
+
+    if user_repo.get_by_username(username):
+        typer.echo(f"用户已存在: {username}", err=True)
+        raise typer.Exit(1)
+
+    api_key = generate_api_key()
+    user = UserRecord(
+        id=str(uuid.uuid4()),
+        username=username,
+        api_key_hash=hash_api_key(api_key),
+        role=role,
+        created_at=datetime.now().isoformat(),
+        updated_at=datetime.now().isoformat(),
+    )
+    user_repo.create(user)
+    typer.echo(f"用户创建成功: {username} (role={role})")
+    typer.echo(f"API Key: {api_key}")
+    typer.echo("请妥善保存 API Key，无法再次查看。")
+
+
+@user_app.command("list")
+def user_list() -> None:
+    """列出所有用户。"""
+    from open_tam.config import Settings
+    from open_tam.persistence.database import get_database
+    from open_tam.persistence.repositories import UserRepository
+
+    settings = Settings.load()
+    db_path = settings.database_url.replace("sqlite:///", "")
+    db = get_database(db_path)
+    user_repo = UserRepository(db)
+    users = user_repo.list_all()
+    if not users:
+        typer.echo("（无用户）")
+        return
+    for u in users:
+        typer.echo(f"  {u.id[:8]}...  {u.username:<20s}  role={u.role}")
+
+
+@user_app.command("delete")
+def user_delete(user_id: str) -> None:
+    """删除用户。"""
+    from open_tam.config import Settings
+    from open_tam.persistence.database import get_database
+    from open_tam.persistence.repositories import UserRepository
+
+    settings = Settings.load()
+    db_path = settings.database_url.replace("sqlite:///", "")
+    db = get_database(db_path)
+    user_repo = UserRepository(db)
+    if user_repo.delete(user_id):
+        typer.echo(f"deleted: {user_id}")
+    else:
+        typer.echo(f"not found: {user_id}", err=True)
+        raise typer.Exit(1)
+
+
+db_app = typer.Typer(help="数据库管理")
+app.add_typer(db_app, name="db")
+
+
+@db_app.command("migrate")
+def db_migrate() -> None:
+    """创建/升级 SQLite 数据库。"""
+    from open_tam.config import Settings
+    from open_tam.persistence.database import get_database
+
+    settings = Settings.load()
+    db_path = settings.database_url.replace("sqlite:///", "")
+    db = get_database(db_path)
+    typer.echo(f"数据库已就绪: {db_path}")
+
+
+history_app = typer.Typer(help="排查历史查看")
+app.add_typer(history_app, name="history")
+
+
+@history_app.command("list")
+def history_list(limit: int = typer.Option(20, help="显示最近 N 条")) -> None:
+    """列出排查历史。"""
+    from open_tam.config import Settings
+    from open_tam.persistence.database import get_database
+    from open_tam.persistence.repositories import InvestigationRepository
+
+    settings = Settings.load()
+    db_path = settings.database_url.replace("sqlite:///", "")
+    db = get_database(db_path)
+    inv_repo = InvestigationRepository(db)
+    investigations = inv_repo.list_all(limit=limit)
+    if not investigations:
+        typer.echo("（无排查记录）")
+        return
+    for inv in investigations:
+        status = inv.status
+        cause = (inv.root_cause or "未定位")[:40]
+        typer.echo(f"  {inv.id[:8]}...  {inv.created_at[:16]}  {status:<10s}  {cause}")
+
+
+@history_app.command("show")
+def history_show(inv_id: str) -> None:
+    """查看排查详情。"""
+    from open_tam.config import Settings
+    from open_tam.persistence.database import get_database
+    from open_tam.persistence.repositories import InvestigationRepository
+
+    settings = Settings.load()
+    db_path = settings.database_url.replace("sqlite:///", "")
+    db = get_database(db_path)
+    inv_repo = InvestigationRepository(db)
+    inv = inv_repo.get_by_id(inv_id)
+    if not inv:
+        typer.echo(f"not found: {inv_id}", err=True)
+        raise typer.Exit(1)
+    typer.echo(f"ID: {inv.id}")
+    typer.echo(f"Alert ID: {inv.alert_id}")
+    typer.echo(f"Status: {inv.status}")
+    typer.echo(f"Root Cause: {inv.root_cause or '未定位'}")
+    typer.echo(f"Confidence: {inv.confidence or '-'}")
+    typer.echo(f"Report: {inv.report_path or '-'}")
+    typer.echo(f"Trace: {inv.trace_path or '-'}")
+    typer.echo(f"Created: {inv.created_at}")
