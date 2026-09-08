@@ -29,14 +29,15 @@ def test_normalize_alert_rejects_non_dict():
 
 
 def test_webhook_persists_alert(tmp_path):
-    client = TestClient(create_webhook_app(inbox_dir=tmp_path))
+    client = TestClient(create_webhook_app(inbox_dir=tmp_path / "inbox", state_dir=tmp_path / "state"))
     resp = client.post("/alerts", json={
         "alert_name": "CPU使用率过高", "service": "demo-app",
         "metric": "cpu_usage", "threshold": 80, "current_value": 92.5,
     })
     assert resp.status_code == 201
     body = resp.json()
-    assert body["alert"]["alert_id"]
-    files = list(tmp_path.glob("*.json"))
+    assert body["alert_id"]
+    inbox = tmp_path / "inbox"
+    files = list(inbox.glob("*.json"))
     assert len(files) == 1
-    assert json.loads(files[0].read_text())["alert_id"] == body["alert"]["alert_id"]
+    assert json.loads(files[0].read_text())["alert_id"] == body["alert_id"]

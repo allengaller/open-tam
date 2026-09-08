@@ -959,6 +959,7 @@ dependencies = [
     { name = "fastapi" },
     { name = "mcp" },
     { name = "pydantic" },
+    { name = "pyyaml" },
     { name = "typer" },
     { name = "uvicorn" },
 ]
@@ -977,6 +978,7 @@ requires-dist = [
     { name = "fastapi", specifier = ">=0.111" },
     { name = "mcp", specifier = ">=1.2" },
     { name = "pydantic", specifier = ">=2.7" },
+    { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "typer", specifier = ">=0.12" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]

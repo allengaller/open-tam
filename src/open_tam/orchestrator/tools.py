@@ -99,7 +99,11 @@ def query_logs_inline(service: str, start: str, end: str, level: str | None = No
 
 
 class McpStdioBackend:
-    """通过 MCP stdio 子进程调用 mock-metrics server（架构演示路径）。"""
+    """通过 MCP stdio 子进程调用 MCP server。按配置路由到 mock 或 aliyun 后端。"""
+
+    def __init__(self, metrics_backend: str = "mock", logs_backend: str = "mock") -> None:
+        self.metrics_backend = metrics_backend
+        self.logs_backend = logs_backend
 
     def execute(self, name: str, args: dict) -> str:
         import asyncio
@@ -112,19 +116,29 @@ class McpStdioBackend:
         from mcp import ClientSession, StdioServerParameters
         from mcp.client.stdio import stdio_client
 
-        from open_tam.mcp_servers.logs_server import _server_command as logs_cmd
-        from open_tam.mcp_servers.metrics_server import _server_command as metrics_cmd
-
-        command, cmd_args = logs_cmd() if name == "query_logs" else metrics_cmd()
+        command, cmd_args = self._resolve_command(name)
         params = StdioServerParameters(
             command=command, args=cmd_args, env=subprocess_env()
         )
-        # CliRunner 捕获的 stderr 无 fileno，errlog 必须指向 DEVNULL
         async with stdio_client(params, errlog=subprocess.DEVNULL) as (read, write):
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 result = await session.call_tool(name, args)
         return result.content[0].text
+
+    def _resolve_command(self, tool_name: str) -> tuple[str, list[str]]:
+        if tool_name == "query_logs":
+            if self.logs_backend == "aliyun":
+                from open_tam.mcp_servers.aliyun_logs_server import _server_command
+                return _server_command()
+            from open_tam.mcp_servers.logs_server import _server_command as logs_cmd
+            return logs_cmd()
+        else:
+            if self.metrics_backend == "aliyun":
+                from open_tam.mcp_servers.aliyun_metrics_server import _server_command
+                return _server_command()
+            from open_tam.mcp_servers.metrics_server import _server_command as metrics_cmd
+            return metrics_cmd()
 
 ASK_METRIC_AGENT_SPEC = {
     "name": "ask_metric_agent",
