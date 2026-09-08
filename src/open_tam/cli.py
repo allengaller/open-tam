@@ -267,5 +267,80 @@ def main() -> None:
     app()
 
 
+skill_app = typer.Typer(help="Skill 知识库管理（排查模板提取/查看/删除）")
+app.add_typer(skill_app, name="skill")
+
+
+@skill_app.command("list")
+def skill_list() -> None:
+    """列出所有 Skill。"""
+    from open_tam.config import Settings
+    from open_tam.skills.loader import SkillLoader
+
+    settings = Settings.load()
+    loader = SkillLoader(settings.skills_dir)
+    skills = loader.load_all()
+    if not skills:
+        typer.echo("（无 Skill）")
+        return
+    for s in skills:
+        typer.echo(f"  {s.id}  {s.name:<30s}  pattern={s.alert_pattern:<20s}  confidence={s.confidence:.2f}")
+
+
+@skill_app.command("show")
+def skill_show(skill_id: str) -> None:
+    """查看 Skill 详情。"""
+    from open_tam.config import Settings
+    from open_tam.skills.loader import SkillLoader
+
+    settings = Settings.load()
+    loader = SkillLoader(settings.skills_dir)
+    skill = loader.get(skill_id)
+    if not skill:
+        typer.echo(f"Skill not found: {skill_id}", err=True)
+        raise typer.Exit(1)
+    typer.echo(skill.to_prompt_section())
+
+
+@skill_app.command("learn")
+def skill_learn(
+    traces: str = typer.Option("traces", help="trace 文件目录"),
+    output: str = typer.Option(None, help="输出目录（默认 skills_dir）"),
+) -> None:
+    """从 trace 目录批量提取排查模板为 Skill。"""
+    from pathlib import Path
+
+    from open_tam.config import Settings
+    from open_tam.skills.extractor import extract_skills_from_dir
+    from open_tam.skills.loader import SkillLoader
+
+    settings = Settings.load()
+    out_dir = Path(output) if output else settings.skills_dir
+    skills = extract_skills_from_dir(traces)
+    if not skills:
+        typer.echo("未从 trace 中提取到 Skill")
+        return
+    loader = SkillLoader(out_dir)
+    for skill in skills:
+        path = loader.save(skill)
+        typer.echo(f"  saved: {path} ({skill.name}, confidence={skill.confidence:.2f})")
+    typer.echo(f"共提取 {len(skills)} 个 Skill")
+
+
+@skill_app.command("delete")
+def skill_delete(skill_id: str) -> None:
+    """删除 Skill。"""
+    from open_tam.config import Settings
+    from open_tam.skills.loader import SkillLoader
+
+    settings = Settings.load()
+    loader = SkillLoader(settings.skills_dir)
+    if loader.delete(skill_id):
+        typer.echo(f"deleted: {skill_id}")
+    else:
+        typer.echo(f"not found: {skill_id}", err=True)
+        raise typer.Exit(1)
+
+
 if __name__ == "__main__":
     main()

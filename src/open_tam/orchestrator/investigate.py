@@ -30,7 +30,20 @@ from open_tam.orchestrator.tools import (
     McpStdioBackend,
 )
 from open_tam.reporting.report import save_report
+from open_tam.skills.loader import SkillLoader
 from open_tam.tracing.trace import TraceRecorder
+
+
+def _build_system_prompt(alert: AlertEvent, settings: Settings, base_prompt: str) -> str:
+    """加载匹配的 Skill 并注入 system prompt。"""
+    try:
+        loader = SkillLoader(settings.skills_dir)
+        skill = loader.match(alert.alert_name, alert.service)
+        if skill:
+            return base_prompt + "\n\n" + skill.to_prompt_section()
+    except Exception:
+        pass
+    return base_prompt
 
 
 def run_investigation(
@@ -107,8 +120,9 @@ def run_investigation(
     guardrails = Guardrails(ACTION_REGISTRY, AuditLogger(settings.state_dir),
                             confirmer=AutoDeny())
     backend = GuardrailsBackend(backend, guardrails, actor="agent")
+    system_prompt = _build_system_prompt(alert, settings, ORCHESTRATOR_PROMPT)
     loop = ReActLoop(model=orch_model, backend=backend, max_steps=settings.max_steps,
-                     char_budget=settings.char_budget, system_prompt=ORCHESTRATOR_PROMPT,
+                     char_budget=settings.char_budget, system_prompt=system_prompt,
                      tools=ORCHESTRATOR_TOOLS, trace=trace)
     result = loop.run(alert)
     path = save_report(alert, result, reports_dir=settings.reports_dir)
