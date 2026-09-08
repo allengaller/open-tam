@@ -42,7 +42,7 @@
 - [x] SSE 流式推送 + InvestigationHub 会话注册表
 - [x] `open-tam serve` 命令
 - [x] 故障模板快捷入口 + fake 开关
-- **验收**：浏览器发起排查并看到流式过程 ✅（2026-08-31，feat/m4-web-ui 分支 10 commits，107 tests green，SSE + 单页聊天 + 故障模板 + 流式时间线完整实现）
+- **验收**：浏览器发起排查并看到流式过程 ✅（2026-08-31，feat/m4-web-ui 分支 10 commits；`open-tam serve` 127.0.0.1:8765 起服务，选 cpu_spike 故障模板一键注入并预填告警 JSON，fake 路径浏览器流式渲染 orchestrator/子 Agent 事件与最终报告卡片（根因/置信度/证据/建议动作/报告路径），报告落盘且 trace 可回放；5 个 API 用例全绿；107 passed + 1 skipped）
 
 ## M5 实盘接入
 

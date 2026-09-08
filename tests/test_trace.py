@@ -24,3 +24,22 @@ def test_recorder_tags_agent_field(tmp_path):
     rec.record("tool_call", tool="query_logs", arguments={"service": "demo-app"})
     records = load_trace(rec.path)
     assert records[0]["agent"] == "log"
+
+
+def test_record_invokes_sink(tmp_path):
+    seen: list[dict] = []
+    trace = TraceRecorder(alert_id="a1", traces_dir=tmp_path, sink=seen.append)
+    trace.record("tool_call", step=0, tool="query_metrics", arguments={"m": 1})
+    trace.record("final", content="done")
+
+    assert [e["kind"] for e in seen] == ["tool_call", "final"]
+    assert seen[0]["tool"] == "query_metrics"
+    on_disk = load_trace(tmp_path / "a1.jsonl")
+    assert [e["kind"] for e in on_disk] == ["tool_call", "final"]
+    assert seen[0] == on_disk[0]
+
+
+def test_record_without_sink_unchanged(tmp_path):
+    trace = TraceRecorder(alert_id="a2", traces_dir=tmp_path)
+    trace.record("final", content="ok")
+    assert load_trace(tmp_path / "a2.jsonl")[0]["kind"] == "final"
