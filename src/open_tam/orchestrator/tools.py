@@ -195,7 +195,9 @@ class McpStdioBackend:
             if self.metrics_backend == "aliyun":
                 from open_tam.mcp_servers.aliyun_metrics_server import _server_command
                 return _server_command()
-            from open_tam.mcp_servers.metrics_server import _server_command as metrics_cmd
+            from open_tam.mcp_servers.metrics_server import (
+                _server_command as metrics_cmd,
+            )
             return metrics_cmd()
 
 ASK_METRIC_AGENT_SPEC = {

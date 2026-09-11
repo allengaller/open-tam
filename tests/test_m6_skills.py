@@ -4,11 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-import yaml
-
 from open_tam.skills.models import Skill, SkillStep
-
 
 # ── models ────────────────────────────────────────────────
 

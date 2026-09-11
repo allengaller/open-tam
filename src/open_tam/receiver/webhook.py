@@ -9,7 +9,6 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 
-from open_tam.models import AlertEvent
 from open_tam.receiver.adapters import adapt_alert
 from open_tam.receiver.dedup import AlertDedup
 

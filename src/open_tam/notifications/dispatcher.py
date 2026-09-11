@@ -2,11 +2,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 from typing import Protocol
 
 
-class NotificationType(str, Enum):
+class NotificationType(StrEnum):
     INVESTIGATION_COMPLETE = "investigation_complete"
     ACTION_CONFIRM = "action_confirm"
 

@@ -1,14 +1,16 @@
 """Playbook executor with guardrails integration."""
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 
 from open_tam.guardrails import Guardrails
 from open_tam.playbook.models import (
     OnFailure,
     Playbook,
     PlaybookResult,
+    PlaybookStep,
     Sensitivity,
     StepResult,
     StepStatus,

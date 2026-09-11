@@ -1,25 +1,21 @@
 """Tests for M10: 告警风暴与高级编排."""
 from __future__ import annotations
 
-import tempfile
-from datetime import datetime
-from pathlib import Path
-
-import pytest
-
 from open_tam.models import AlertEvent
 from open_tam.playbook.executor import PlaybookExecutor
 from open_tam.playbook.models import (
-    OnFailure,
     Playbook,
-    PlaybookResult,
     PlaybookStep,
     Sensitivity,
     StepStatus,
 )
 from open_tam.playbook.registry import PlaybookRegistry
-from open_tam.storm.correlator import AlertCorrelator, AlertGroup
-from open_tam.storm.priority_queue import AlertTask, Priority, PriorityQueue, infer_priority
+from open_tam.storm.correlator import AlertCorrelator
+from open_tam.storm.priority_queue import (
+    Priority,
+    PriorityQueue,
+    infer_priority,
+)
 
 
 def _make_alert(alert_id: str, service: str = "demo-app", severity: str = "warning") -> AlertEvent:
@@ -86,7 +82,7 @@ class TestPriorityQueue:
     def test_push_and_pop(self):
         queue = PriorityQueue()
         alert = _make_alert("a1")
-        task = queue.push(alert, Priority.P1)
+        queue.push(alert, Priority.P1)
         assert len(queue) == 1
         popped = queue.pop()
         assert popped is not None

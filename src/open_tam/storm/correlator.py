@@ -1,9 +1,9 @@
 """Alert correlation engine for storm detection."""
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Iterator
 
 from open_tam.models import AlertEvent
 

@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from open_tam.faults import FAULT_MODES, FaultState
 from open_tam.orchestrator.agents import K8S_AGENT_PROMPT
 from open_tam.orchestrator.tools import (
@@ -76,10 +74,6 @@ class TestK8sServer:
     def test_k8s_server_imports(self):
         from open_tam.mcp_servers.k8s_server import (
             TOOLS,
-            _analyze_with_k8sgpt,
-            _query_k8s_events,
-            _query_node_status,
-            _query_pod_status,
         )
         assert len(TOOLS) == 4
 

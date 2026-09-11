@@ -4,12 +4,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import time
-from datetime import datetime, timezone
-from pathlib import Path
 
 import pytest
-
 
 # ── adapters ──────────────────────────────────────────────
 
@@ -52,7 +48,7 @@ class TestCmsAdapter:
         assert event.service == "web-svc"
 
     def test_cms_severity_mapping(self):
-        from open_tam.receiver.adapters import from_cms_alert, map_severity
+        from open_tam.receiver.adapters import map_severity
 
         assert map_severity("CRITICAL") == "critical"
         assert map_severity("WARN") == "warning"

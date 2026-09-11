@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from open_tam.models import AlertEvent
@@ -11,7 +11,7 @@ def generate_id() -> str:
 
 
 def iso_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 _SEVERITY_MAP = {
@@ -51,11 +51,11 @@ def from_cms_alert(payload: dict) -> AlertEvent:
 
     alert_time = payload.get("alertTime")
     if isinstance(alert_time, (int, float)):
-        triggered_at = datetime.fromtimestamp(alert_time / 1000, tz=timezone.utc)
+        triggered_at = datetime.fromtimestamp(alert_time / 1000, tz=UTC)
     elif isinstance(alert_time, str):
         triggered_at = datetime.fromisoformat(alert_time)
     else:
-        triggered_at = datetime.now(timezone.utc)
+        triggered_at = datetime.now(UTC)
 
     return AlertEvent(
         alert_id=str(payload.get("alertId", generate_id())),
@@ -83,7 +83,7 @@ def from_alertmanager(payload: dict) -> AlertEvent:
     if isinstance(starts_at, str):
         triggered_at = datetime.fromisoformat(starts_at.replace("Z", "+00:00"))
     else:
-        triggered_at = datetime.now(timezone.utc)
+        triggered_at = datetime.now(UTC)
 
     return AlertEvent(
         alert_id=str(alert.get("fingerprint", generate_id())),

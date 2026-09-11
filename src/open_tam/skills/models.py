@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from fnmatch import fnmatch
 from uuid import uuid4
 
@@ -25,7 +25,7 @@ class Skill(BaseModel):
     root_cause_hints: list[str] = Field(default_factory=list)
     evidence_patterns: list[str] = Field(default_factory=list)
     created_from: str | None = None
-    created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = Field(default_factory=lambda: datetime.now(UTC).isoformat())
     confidence: float = 0.0
 
     def matches(self, alert_name: str, service: str = "") -> bool:

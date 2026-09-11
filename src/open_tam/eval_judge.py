@@ -7,7 +7,6 @@ from dataclasses import dataclass
 
 from open_tam.orchestrator.loop import ChatModel, FakeChatModel, ModelReply
 
-
 JUDGE_PROMPT = """你是一个排障报告质量评审专家。请评估以下排障报告的质量（0.0 到 1.0 之间的小数）。
 
 ## 报告内容

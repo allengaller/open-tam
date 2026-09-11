@@ -47,7 +47,7 @@ def query_logs(
         return json.dumps([], ensure_ascii=False)
 
     try:
-        from aliyun.log import LogClient, GetLogsRequest
+        from aliyun.log import GetLogsRequest, LogClient
 
         endpoint = f"{region}.log.aliyuncs.com"
         client = LogClient(endpoint, access_key_id, access_key_secret)

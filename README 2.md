@@ -10,95 +10,64 @@
 flowchart TB
     subgraph 入口层
         CLI[CLI · Typer]
-        WH[告警 Webhook<br/>POST /alerts · HMAC 签名验证]
-        AD[adapters 多格式适配<br/>cms / alertmanager / native]
-        DD[AlertDedup 滑窗去重<br/>默认 300s]
-        AR[alert-receiver<br/>AlertEvent 标准化]
+        WH[云监控 Webhook<br/>POST /alerts · M5]
+        AR[alert-receiver<br/>AlertEvent 标准化<br/>云监控字段别名自动映射]
         CLI --> AR
-        WH --> AD --> DD --> AR
-    end
-
-    subgraph 风暴处理
-        CORR[AlertCorrelator<br/>时间窗口 + 服务重叠 + 依赖关联聚合]
-        PQ[PriorityQueue<br/>P0–P3 优先级 · P0 抢占]
-        AR -.风暴场景.-> CORR --> PQ
+        WH --> AR
     end
 
     subgraph 编排层
         ORC[Orchestrator<br/>手写 ReActLoop<br/>think → act → observe<br/>max_steps + char_budget 双预算]
-        SKILL[Skill 注入<br/>按告警名匹配最高置信度模板<br/>拼入 system prompt]
-        MA[Metric-Agent]
-        LA[Log-Agent]
-        KA[K8s-Agent<br/>query_k8s_events / pod_status<br/>node_status / analyze_with_k8sgpt]
-        SKILL -.模板.-> ORC
+        MA[Metric-Agent<br/>SpecialistAgent<br/>独立 prompt + 工具 + trace]
+        LA[Log-Agent<br/>SpecialistAgent<br/>独立 prompt + 工具 + trace]
         ORC -- ask_metric_agent --> MA
         ORC -- ask_log_agent --> LA
-        ORC -- ask_k8s_agent --> KA
         ORC -- execute_action --> GR
     end
 
-    subgraph 知识层
-        EXT[Skill Extractor<br/>从 traces 提取排查模板<br/>+0.1 置信度/条]
-        LD[SkillLoader<br/>YAML 存储 · fnmatch 匹配]
-        EXT --> LD
-        LD -.-> SKILL
-    end
-
-    subgraph 护栏与动作层
+    subgraph 护栏层
         GR[Guardrails 引擎<br/>白名单 → 参数校验 → dry-run<br/>→ 敏感操作确认 → 执行]
-        AUD[AuditLogger · JSONL 逐条审计]
-        PB[PlaybookExecutor<br/>YAML 编排 · on_failure abort/continue/rollback<br/>confidence_threshold 门槛]
+        AUD[AuditLogger<br/>var/audit.log · JSONL<br/>每条决策逐落]
         GR --> AUD
-        PB --> GR
     end
 
     subgraph 模型层
-        LLM[AgentScope ChatModel<br/>DashScope Qwen 主备切换<br/>FakeChatModel 无 Key 替身]
-        JUDGE[EvidenceJudge<br/>LLM-as-Judge 证据充分性 0–1 评分]
+        LLM[AgentScope ChatModel<br/>DashScope Qwen 主备切换<br/>消息/工具格式自动转换<br/>FakeChatModel 无 Key 替身]
         ORC --> LLM
         MA --> LLM
         LA --> LLM
-        KA --> LLM
     end
 
     subgraph MCP 工具总线
         direction LR
         IB[InlineBackend<br/>直连本地 mock 函数]
-        MCP[McpStdioBackend<br/>按 metrics_backend / logs_backend<br/>配置路由 mock 或 aliyun]
-        MM[mock-metrics<br/>mock-logs]
-        ALI[aliyun-metrics CMS<br/>aliyun-logs SLS]
-        K8S[mock-k8s<br/>K8sGPT 风格 4 工具]
+        MCP[McpStdioBackend<br/>stdio 子进程<br/>MCP 协议标准调用]
+        MM[mock-metrics<br/>FastMCP Server]
+        ML[mock-logs<br/>FastMCP Server]
+        ALI[alibabacloud-observability<br/>M5 替换接入]
+        K8S[K8sGPT MCP<br/>后期接入]
         IB --> MM
+        IB --> ML
         MCP --> MM
-        MCP --> ALI
-        MCP --> K8S
+        MCP --> ML
+        MCP -.M5.-> ALI
+        MCP -.后期.-> K8S
     end
 
     MA --> IB
     LA --> IB
-    KA --> IB
-
-    subgraph 平台层
-        DB[(SQLite WAL<br/>users / investigations<br/>alerts / audit_entries)]
-        AUTH[AuthMiddleware<br/>X-API-Key / Bearer<br/>admin / operator / viewer]
-        NOTI[通知集成<br/>钉钉 / 飞书 / Slack webhook]
-        AUTH --> DB
-    end
 
     subgraph 输出层
-        REP[reports/*.md 三段式根因报告]
-        TRC[traces/*.jsonl 排查语料]
-        EVAL[reports/eval-*.md<br/>定位率/关键词命中/平均步数<br/>A/B 对比报告]
-        PAT[patrol-*.md 阈值巡检<br/>8 故障模式]
+        REP[reports/*.md<br/>三段式根因报告<br/>结论摘要 · 异常清单 · 建议动作]
+        TRC[traces/*.jsonl<br/>排查语料<br/>alert_received · tool_call<br/>observation · final]
+        PAT[patrol-*.md<br/>阈值巡检报告<br/>4 故障模式 × 窗口峰值]
     end
 
     ORC --> REP
     ORC --> TRC
     MA --> TRC
     LA --> TRC
-    KA --> TRC
-    ORC -.完成事件.-> NOTI
-    TRC -.语料.-> EXT
+    GR -.审计.-> AUD
 ```
 
 ## 功能清单
@@ -159,70 +128,17 @@ flowchart TB
 | 能力 | 说明 |
 |---|---|
 | CI | GitHub Actions：`uv sync --frozen` → `ruff check .` → `pytest -q` |
-| 测试 | 244 passed / 1 skipped，33 个测试文件，覆盖单测 + 集成 + CLI + 全部里程碑，~6s |
+| 测试 | 96 passed / 1 skipped，24 个测试文件，覆盖单测 + 集成 + CLI，~1.9s |
 | Lint | ruff（E4/E7/E9/F/I/B/UP），target py312 |
 | 包管理 | uv + hatchling，`uv.lock` 锁定依赖 |
 | GTM 落地页 | `GTM/index.html` 单文件静态页，零构建，可直接部署 |
 
-### M4 · Web UI
+### 待实现
 
-| 能力 | 说明 |
+| 里程碑 | 说明 |
 |---|---|
-| 单页聊天界面 | `web/static/index.html` 单文件前端（内嵌 CSS/JS，零构建）：故障模板一键注入 + 告警预填 + 流式时间线 |
-| SSE 流式排查 | `POST /api/investigations` 202 受理 → `GET /api/investigations/{id}/events` 流式推送；刷新重连按快照重放不丢事件 |
-| InvestigationHub | 内存会话注册表 + 事件广播：TraceRecorder sink 旁路回调（trace JSONL 仍是唯一事实源），线程→asyncio 桥接 |
-| 核心复用 | `orchestrator/investigate.py: run_investigation` 排查组装主体，CLI 与 Web 共用同一路径 |
-| 子 Agent 区分 | orchestrator / metric / log 事件按 `agent` 字段配色区分，观察可折叠展开 |
-
-### M5 · 实盘接入
-
-| 能力 | 说明 |
-|---|---|
-| 多格式告警适配 | `receiver/adapters.py`：cms（云监控）/ alertmanager / native 自动检测，P1–P4 severity 映射 |
-| Webhook 签名验证 | HMAC-SHA256 `X-Signature`（`OPEN_TAM_WEBHOOK_SECRET`），滑窗去重（默认 300s，同告警名+服务） |
-| 阿里云 MCP 后端 | `aliyun_metrics_server`（CMS DescribeMetricData）/ `aliyun_logs_server`（SLS），工具签名与 mock 完全一致 |
-| 后端路由 | `OPEN_TAM_METRICS_BACKEND` / `OPEN_TAM_LOGS_BACKEND` = `mock` \| `aliyun`，排查代码零改动切换 |
-
-### M6 · 知识沉淀与 Skill 系统
-
-| 能力 | 说明 |
-|---|---|
-| trace → Skill | `skill learn` 批量从 traces 提取工具调用序列 + 根因模板，按告警名/服务 fnmatch 聚合，每多一条 trace 置信度 +0.1 |
-| Skill 注入 | 排查时按告警名匹配最高置信度模板，拼入 orchestrator system prompt |
-| Skill 管理 | YAML 存储：`skill learn / list / show / delete`；支持手写 YAML |
-
-### M7 · 多租户与生产化
-
-| 能力 | 说明 |
-|---|---|
-| SQLite 持久化 | WAL 模式 + 版本迁移（`db migrate`）：users / investigations / alerts / audit_entries |
-| API Key 认证 | `AuthMiddleware`：`X-API-Key` 或 `Bearer`；角色 admin / operator / viewer（读写/排查/管用户权限集） |
-| 通知集成 | 钉钉 / 飞书 / Slack webhook（markdown 消息，fail-soft）：排查完成、动作确认事件 |
-| 历史检索 | `history list / show` 排查历史持久化与查询 |
-
-### M8 · K8s 与基础设施排障
-
-| 能力 | 说明 |
-|---|---|
-| K8sGPT 风格 MCP | `k8s_server.py` 四工具：`query_k8s_events` / `query_pod_status` / `query_node_status` / `analyze_with_k8sgpt` |
-| k8s-agent | 第三子 Agent，与 metric/log-agent 并列；Pod/Node/DNS/证书类问题委托给它 |
-| 新故障模式 | `pod_crash_loop` / `node_not_ready` / `dns_failure` / `cert_expiry`（总计 8 种，均带 eval_keywords） |
-
-### M9 · 高级评测与质量闭环
-
-| 能力 | 说明 |
-|---|---|
-| LLM-as-Judge | `EvidenceJudge`：证据充分性锚定评分 0.0–1.0（根因准确性 + 证据链），纳入 eval 流程 |
-| A/B 模型对比 | `open-tam eval-compare`：多模型 × 故障集对比，Markdown 报告含指标表 + 逐故障明细 |
-| CI 质量门 | `open-tam eval --min-hit-rate 0.8`：定位率低于阈值退出码 1，可直接接 CI |
-
-### M10 · 告警风暴与高级编排
-
-| 能力 | 说明 |
-|---|---|
-| 告警关联聚合 | `AlertCorrelator`：时间窗口 + 服务重叠 + 依赖配置 → AlertGroup，风暴降噪 |
-| 优先级排查队列 | `PriorityQueue`（heapq）：P0–P3 分级，P0 抢占 P2 |
-| 修复 Playbook | YAML 定义（敏感度/auto_execute/on_failure=abort\|continue\|rollback/confidence_threshold），经 Guardrails 逐条执行 |
+| M4 Web UI | 设计已定稿（SSE 流式排查 + 单页聊天界面），实现待启动 |
+| M5 实盘接入 | alibabacloud-observability MCP 替换 mock-metrics、SLS 替换 mock-logs、真实云监控 Webhook |
 
 ## 产品主页（GTM 落地页）
 
@@ -240,8 +156,6 @@ python3 -m http.server 8643 --directory GTM
 - 架构一页纸：[docs/architecture.md](docs/architecture.md)
 - MVP 分阶段清单：[docs/mvp-plan.md](docs/mvp-plan.md)
 - 设计文档：[docs/superpowers/specs/2026-08-28-sre-agent-design.md](docs/superpowers/specs/2026-08-28-sre-agent-design.md)
-- M4 Web UI 设计：[docs/superpowers/specs/2026-08-31-m4-web-ui-design.md](docs/superpowers/specs/2026-08-31-m4-web-ui-design.md)
-- M5–M10 路线图设计：[docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md](docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md)
 - 产品定位与受众：[PRODUCT.md](PRODUCT.md)
 - GTM 页面设计系统契约：[DESIGN.md](DESIGN.md)
 
@@ -252,14 +166,9 @@ python3 -m http.server 8643 --directory GTM
 | M0 骨架 | 已完成 |
 | M1 排查闭环 | 已完成（DashScope qwen-plus 真实模型验收通过） |
 | M2 多 Agent + 语料 | 已完成（orchestrator + metric-agent + log-agent，trace 落盘） |
-| M3 护栏 + 巡检 | 已完成（白名单拦截、审计日志、阈值巡检报告、fake 回归） |
-| M4 Web UI | 已完成（SSE 流式排查 + 单页聊天界面，浏览器 golden path 验收 + 刷新重放） |
-| M5 实盘接入 | 已完成（多格式 webhook + 签名/去重 + aliyun CMS/SLS MCP 后端路由） |
-| M6 知识沉淀 | 已完成（trace 提取 Skill + 匹配注入 + CLI 管理） |
-| M7 多租户与生产化 | 已完成（SQLite 持久化 + API Key 认证 + 通知集成） |
-| M8 K8s 排障 | 已完成（K8sGPT 风格 MCP + k8s-agent + 4 种新故障模式） |
-| M9 高级评测 | 已完成（LLM-as-Judge + A/B 对比 + CI 质量门） |
-| M10 告警风暴与高级编排 | 已完成（关联聚合 + 优先级队列 + Playbook 修复编排） |
+| M3 护栏 + 巡检 | 已完成（2026-08-31 验收：白名单拦截、审计日志、阈值巡检报告、fake 回归） |
+| M4 Web UI | 设计已定稿（SSE 流式排查 + 单页聊天界面），实现待启动 |
+| M5 实盘接入 | 规划中（云监控 webhook + alibabacloud-observability MCP + SLS） |
 
 ## 快速开始
 
@@ -320,12 +229,6 @@ uv run open-tam eval --faults cpu_spike --runs 3  # 指定故障、重复多次
 | `open-tam patrol run` | 立即巡检一次，产出巡检报告 |
 | `open-tam patrol watch --every-min 5` | 每 5 分钟巡检一次（Ctrl-C 退出） |
 | `open-tam serve [--host 127.0.0.1] [--port 8000]` | 启动 Web UI（聊天式流式排查） |
-| `open-tam skill learn --traces traces/` | 从 trace 语料批量提取排查 Skill |
-| `open-tam skill list` / `skill show <name>` / `skill delete <name>` | Skill 管理（YAML 存储） |
-| `open-tam user create --role admin` | 创建用户（API Key 仅创建时打印一次） |
-| `open-tam db migrate` | SQLite 版本迁移 |
-| `open-tam history list` / `history show <id>` | 排查历史持久化检索 |
-| `open-tam eval-compare --models a,b` | A/B 模型对比评测 |
 
 ## 已知环境注意事项
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from open_tam.skills.models import Skill, SkillStep
@@ -44,7 +44,7 @@ def extract_skill_from_trace(trace_path: str | Path) -> Skill:
         root_cause_hints=root_cause_hints,
         evidence_patterns=evidence_keywords,
         created_from=str(trace_path),
-        created_at=datetime.now(timezone.utc).isoformat(),
+        created_at=datetime.now(UTC).isoformat(),
         confidence=confidence,
     )
 
@@ -65,7 +65,7 @@ def extract_skills_from_dir(traces_dir: str | Path) -> list[Skill]:
             continue
 
     result = []
-    for key, skills in skills_by_pattern.items():
+    for skills in skills_by_pattern.values():
         best = max(skills, key=lambda s: s.confidence)
         if len(skills) > 1:
             best.confidence = min(1.0, best.confidence + 0.1 * (len(skills) - 1))
@@ -97,5 +97,5 @@ def _calculate_confidence(entries: list[dict]) -> float:
 
 def _generate_skill_id(alert_pattern: str) -> str:
     safe = alert_pattern.replace("*", "all").replace(" ", "_").lower()
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
     return f"{safe}_{ts}"

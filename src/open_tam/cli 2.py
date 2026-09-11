@@ -99,7 +99,7 @@ def investigate(
         )
     except RuntimeError as exc:
         typer.echo(f"错误：{exc}", err=True)
-        raise typer.Exit(1) from exc
+        raise typer.Exit(1)
     typer.echo(f"report saved: {path}")
     typer.echo(f"trace saved: {trace.path}")
     typer.echo(result.root_cause or "未定位根因")
@@ -384,8 +384,8 @@ def user_create(
     role: str = typer.Option("viewer", help="角色: admin/operator/viewer"),
 ) -> None:
     """创建用户并输出 API Key。"""
-    import uuid
     from datetime import datetime
+    import uuid
 
     from open_tam.auth.apikey import generate_api_key, hash_api_key
     from open_tam.config import Settings
@@ -465,7 +465,7 @@ def db_migrate() -> None:
 
     settings = Settings.load()
     db_path = settings.database_url.replace("sqlite:///", "")
-    get_database(db_path)
+    db = get_database(db_path)
     typer.echo(f"数据库已就绪: {db_path}")
 
 

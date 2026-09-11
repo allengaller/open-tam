@@ -1,14 +1,12 @@
 """A/B 模型对比评测。"""
 from __future__ import annotations
 
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 from open_tam.config import Settings
-from open_tam.eval import EvalReport, alert_for, keyword_hit, run_eval
-from open_tam.faults import FAULT_MODES, FaultState
+from open_tam.eval import EvalReport, run_eval
 
 
 @dataclass

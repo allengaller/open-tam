@@ -1,21 +1,18 @@
 """Tests for M7: 多租户与生产化."""
 from __future__ import annotations
 
-import json
 import tempfile
 from datetime import datetime
 from pathlib import Path
 
-import pytest
-
 from open_tam.auth.apikey import generate_api_key, hash_api_key, verify_api_key
 from open_tam.auth.roles import Role, has_permission
+from open_tam.notifications.dingtalk import DingTalkNotifier
 from open_tam.notifications.dispatcher import (
     NotificationDispatcher,
     NotificationEvent,
     NotificationType,
 )
-from open_tam.notifications.dingtalk import DingTalkNotifier
 from open_tam.notifications.feishu import FeishuNotifier
 from open_tam.notifications.slack import SlackNotifier
 from open_tam.persistence.database import Database, get_database, reset_database

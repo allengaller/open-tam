@@ -1,12 +1,6 @@
 """M9 tests: LLM-as-Judge, multi-dimensional eval, A/B compare, CLI flags."""
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
-import pytest
-
-
 # ── LLM-as-Judge ─────────────────────────────────────────
 
 
