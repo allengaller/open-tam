@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from uuid import uuid4
 
 from open_tam.config import Settings
 from open_tam.faults import FAULT_MODES, FaultMode, FaultState
@@ -148,3 +149,29 @@ def write_eval_report(report: EvalReport, reports_dir: Path) -> Path:
         )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+def persist_eval_report(db, report: EvalReport, report_path: Path | None) -> str:
+    """评测结果落 SQLite（Web 评测标签页数据源），返回 run id。"""
+    from open_tam.persistence.repositories import EvalRunRecord, EvalRunRepository
+
+    rec = EvalRunRecord(
+        id=uuid4().hex[:12],
+        model_label=report.model_label,
+        total=report.total,
+        located_rate=report.located_rate,
+        hit_rate=report.hit_rate,
+        avg_steps=report.avg_steps,
+        avg_elapsed_s=report.avg_elapsed_s,
+        avg_evidence_sufficiency=report.avg_evidence_sufficiency,
+        runs=[{
+            "fault": r.fault, "root_cause": r.root_cause,
+            "keyword_hit": r.keyword_hit, "confidence": r.confidence,
+            "steps": r.steps, "elapsed_s": r.elapsed_s,
+            "evidence_sufficiency": r.evidence_sufficiency,
+        } for r in report.runs],
+        report_path=str(report_path) if report_path else None,
+        created_at=datetime.now().isoformat(),
+    )
+    EvalRunRepository(db).create(rec)
+    return rec.id

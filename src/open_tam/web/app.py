@@ -162,6 +162,34 @@ def create_app(*, db=None, auth_enabled: bool | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="unknown skill")
         return {"deleted": skill_id}
 
+    @app.get("/api/evals")
+    async def evals_list(limit: int = 20) -> dict:
+        from open_tam.persistence.repositories import EvalRunRepository
+
+        records = EvalRunRepository(db).list_all(limit=limit)
+        return {"evals": [
+            {"id": r.id, "model_label": r.model_label, "total": r.total,
+             "located_rate": r.located_rate, "hit_rate": r.hit_rate,
+             "avg_steps": r.avg_steps, "avg_elapsed_s": r.avg_elapsed_s,
+             "avg_evidence_sufficiency": r.avg_evidence_sufficiency,
+             "report_path": r.report_path, "created_at": r.created_at}
+            for r in records
+        ]}
+
+    @app.get("/api/evals/{eval_id}")
+    async def eval_detail(eval_id: str) -> dict:
+        from open_tam.persistence.repositories import EvalRunRepository
+
+        r = EvalRunRepository(db).get_by_id(eval_id)
+        if r is None:
+            raise HTTPException(status_code=404, detail="unknown eval run")
+        return {"id": r.id, "model_label": r.model_label, "total": r.total,
+                "located_rate": r.located_rate, "hit_rate": r.hit_rate,
+                "avg_steps": r.avg_steps, "avg_elapsed_s": r.avg_elapsed_s,
+                "avg_evidence_sufficiency": r.avg_evidence_sufficiency,
+                "runs": r.runs, "report_path": r.report_path,
+                "created_at": r.created_at}
+
     @app.get("/api/faults")
     async def list_faults() -> dict:
         return {"faults": [

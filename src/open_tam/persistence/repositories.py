@@ -55,6 +55,21 @@ class AuditEntry:
     created_at: str
 
 
+@dataclass
+class EvalRunRecord:
+    id: str
+    model_label: str
+    total: int
+    located_rate: float
+    hit_rate: float
+    avg_steps: float
+    avg_elapsed_s: float
+    avg_evidence_sufficiency: float
+    runs: list[dict[str, Any]]
+    report_path: str | None
+    created_at: str
+
+
 class UserRepository:
     def __init__(self, db: Database) -> None:
         self.db = db
@@ -236,4 +251,46 @@ class AuditRepository:
             d["params"] = json.loads(d["params"]) if d["params"] else None
             d["dry_run"] = bool(d["dry_run"])
             results.append(AuditEntry(**d))
+        return results
+
+
+class EvalRunRepository:
+    def __init__(self, db: Database) -> None:
+        self.db = db
+
+    def create(self, rec: EvalRunRecord) -> None:
+        assert self.db._conn is not None
+        self.db._conn.execute(
+            """INSERT INTO eval_runs
+               (id, model_label, total, located_rate, hit_rate, avg_steps,
+                avg_elapsed_s, avg_evidence_sufficiency, runs_json, report_path, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (rec.id, rec.model_label, rec.total, rec.located_rate, rec.hit_rate,
+             rec.avg_steps, rec.avg_elapsed_s, rec.avg_evidence_sufficiency,
+             json.dumps(rec.runs, ensure_ascii=False), rec.report_path, rec.created_at),
+        )
+        self.db._conn.commit()
+
+    def get_by_id(self, run_id: str) -> EvalRunRecord | None:
+        assert self.db._conn is not None
+        row = self.db._conn.execute(
+            "SELECT * FROM eval_runs WHERE id = ?", (run_id,)
+        ).fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["runs"] = json.loads(d.pop("runs_json"))
+        return EvalRunRecord(**d)
+
+    def list_all(self, limit: int = 20) -> list[EvalRunRecord]:
+        assert self.db._conn is not None
+        rows = self.db._conn.execute(
+            "SELECT * FROM eval_runs ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        results = []
+        for r in rows:
+            d = dict(r)
+            d["runs"] = json.loads(d.pop("runs_json"))
+            results.append(EvalRunRecord(**d))
         return results

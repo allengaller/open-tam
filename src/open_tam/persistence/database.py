@@ -6,7 +6,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
 
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
 
 
 class Database:
@@ -43,6 +43,8 @@ class Database:
         current = self._get_schema_version()
         if current < 1:
             self._migrate_v1()
+        if current < 2:
+            self._migrate_v2()
         self._set_schema_version(CURRENT_SCHEMA_VERSION)
 
     def _get_schema_version(self) -> int:
@@ -127,6 +129,27 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_investigations_status ON investigations(status);
             CREATE INDEX IF NOT EXISTS idx_alerts_service ON alerts(service);
             CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_entries(actor);
+        """)
+        self._conn.commit()
+
+    def _migrate_v2(self) -> None:
+        assert self._conn is not None
+        self._conn.executescript("""
+            CREATE TABLE IF NOT EXISTS eval_runs (
+                id TEXT PRIMARY KEY,
+                model_label TEXT NOT NULL,
+                total INTEGER NOT NULL,
+                located_rate REAL NOT NULL,
+                hit_rate REAL NOT NULL,
+                avg_steps REAL NOT NULL,
+                avg_elapsed_s REAL NOT NULL,
+                avg_evidence_sufficiency REAL NOT NULL,
+                runs_json TEXT NOT NULL,
+                report_path TEXT,
+                created_at TEXT NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_eval_runs_created ON eval_runs(created_at);
         """)
         self._conn.commit()
 

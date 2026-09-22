@@ -87,6 +87,20 @@
   .skill-detail { margin-top:6px; }
   .skill-detail pre { margin:6px 0 0; padding:8px; background:#f1f3f5; border-radius:6px;
                       overflow:auto; font-size:12px; white-space:pre-wrap; word-break:break-all; }
+  /* 评测视图 */
+  #view-evals { display:none; }
+  .eval-item { background:var(--card); border:1px solid var(--line); border-radius:10px;
+               padding:10px 14px; }
+  .eval-item .line1 { display:flex; gap:10px; align-items:center; font-size:13px; }
+  .eval-item .id { font-family:ui-monospace,monospace; color:var(--dim); font-size:12px; }
+  .panel { background:var(--card); border:1px solid var(--line); border-radius:10px;
+           padding:12px 14px; }
+  .panel h3 { margin:0 0 8px; font-size:14px; }
+  table.cmp { border-collapse:collapse; width:100%; font-size:13px; }
+  table.cmp th, table.cmp td { border:1px solid var(--line); padding:4px 8px; text-align:right; }
+  table.cmp th:first-child, table.cmp td:first-child { text-align:left; }
+  #cmp-box select { border:1px solid var(--line); border-radius:6px; padding:4px;
+                    font-size:13px; max-width:220px; }
 </style>
 </head>
 <body>
@@ -95,6 +109,7 @@
   <button class="tab active" id="tab-investigate">排查台</button>
   <button class="tab" id="tab-history">排查历史</button>
   <button class="tab" id="tab-skills">知识库</button>
+  <button class="tab" id="tab-evals">评测</button>
   <span id="fault-bar"><span class="hint">故障模板：</span><span id="faults"></span></span>
   <span id="user-box"></span>
 </header>
@@ -109,6 +124,23 @@
 <main id="view-skills">
   <div class="hint" id="skills-hint">加载中…</div>
   <div id="skills-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+</main>
+<main id="view-evals">
+  <div class="hint" id="evals-hint">加载中…</div>
+  <div class="panel" id="trend-panel" style="display:none">
+    <h3>命中率趋势</h3>
+    <div id="eval-trend"></div>
+  </div>
+  <div class="panel" id="cmp-box" style="display:none">
+    <h3>A/B 对比</h3>
+    <div class="row">
+      <select id="cmp-a"></select>
+      <span class="hint">vs</span>
+      <select id="cmp-b"></select>
+    </div>
+    <div id="cmp-table" style="margin-top:8px"></div>
+  </div>
+  <div id="evals-list" style="display:flex;flex-direction:column;gap:8px;"></div>
 </main>
 <footer id="composer-bar">
   <div class="composer">
@@ -158,23 +190,27 @@ function authHeaders(extra) {
 const viewInv = document.getElementById('view-investigate');
 const viewHist = document.getElementById('view-history');
 const viewSkills = document.getElementById('view-skills');
+const viewEvals = document.getElementById('view-evals');
 function showTab(name) {
   viewInv.style.display = name === 'investigate' ? 'flex' : 'none';
   viewHist.style.display = name === 'history' ? 'flex' : 'none';
   viewSkills.style.display = name === 'skills' ? 'flex' : 'none';
+  viewEvals.style.display = name === 'evals' ? 'flex' : 'none';
   document.getElementById('composer-bar').style.display =
     name === 'investigate' ? 'block' : 'none';
   document.getElementById('fault-bar').style.display =
     name === 'investigate' ? 'inline' : 'none';
-  for (const t of ['investigate', 'history', 'skills']) {
+  for (const t of ['investigate', 'history', 'skills', 'evals']) {
     document.getElementById('tab-' + t).classList.toggle('active', name === t);
   }
   if (name === 'history') loadHistory();
   if (name === 'skills') loadSkills();
+  if (name === 'evals') loadEvals();
 }
 document.getElementById('tab-investigate').onclick = () => showTab('investigate');
 document.getElementById('tab-history').onclick = () => showTab('history');
 document.getElementById('tab-skills').onclick = () => showTab('skills');
+document.getElementById('tab-evals').onclick = () => showTab('evals');
 
 /* ---------- 排查台 ---------- */
 function addUserCard(alertJson) {
@@ -441,6 +477,126 @@ function renderSkill(s) {
     body.textContent = r.ok
       ? JSON.stringify(await r.json(), null, 2)
       : '详情加载失败：' + r.status;
+    body.dataset.loaded = '1';
+  });
+  item.appendChild(d);
+  return item;
+}
+
+/* ---------- 评测 ---------- */
+const CMP_METRICS = [
+  ['根因定位率', 'located_rate', v => (v * 100).toFixed(0) + '%'],
+  ['关键词命中率', 'hit_rate', v => (v * 100).toFixed(0) + '%'],
+  ['平均步数', 'avg_steps', v => v.toFixed(1)],
+  ['平均耗时(s)', 'avg_elapsed_s', v => v.toFixed(2)],
+  ['证据充分性', 'avg_evidence_sufficiency', v => v.toFixed(2)],
+];
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function loadEvals() {
+  const hint = document.getElementById('evals-hint');
+  const list = document.getElementById('evals-list');
+  const r = await fetch('/api/evals', { headers: authHeaders() });
+  if (r.status === 401) { showLogin(); return; }
+  if (!r.ok) { hint.textContent = '评测加载失败：' + r.status; return; }
+  const { evals } = await r.json();
+  list.innerHTML = '';
+  if (!evals.length) {
+    hint.textContent = '（暂无评测记录。用 `open-tam eval --fake` 跑一次评测）';
+    document.getElementById('trend-panel').style.display = 'none';
+    document.getElementById('cmp-box').style.display = 'none';
+    return;
+  }
+  hint.textContent = '共 ' + evals.length + ' 次评测（按时间降序）：';
+  document.getElementById('trend-panel').style.display = 'block';
+  document.getElementById('eval-trend').innerHTML = renderTrend(evals);
+  setupCompare(evals);
+  for (const ev of evals) list.appendChild(renderEvalItem(ev));
+}
+
+function renderTrend(evals) {
+  const data = [...evals].reverse();
+  const W = 760, H = 150, P = 34;
+  const xs = i => P + i * (W - 2 * P) / (data.length - 1);
+  const ys = v => H - P - v * (H - 2 * P);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="命中率趋势">`;
+  for (const v of [0, 0.5, 1]) {
+    svg += `<line x1="${P}" y1="${ys(v)}" x2="${W - P}" y2="${ys(v)}" stroke="#e3e6ea"/>`;
+    svg += `<text x="${P - 6}" y="${ys(v) + 4}" font-size="10" fill="#6b7280" text-anchor="end">${v * 100}%</text>`;
+  }
+  svg += `<polyline points="${data.map((e, i) => `${xs(i)},${ys(e.hit_rate)}`).join(' ')}"
+           fill="none" stroke="#2563eb" stroke-width="2"/>`;
+  data.forEach((e, i) => {
+    svg += `<circle cx="${xs(i)}" cy="${ys(e.hit_rate)}" r="3.5" fill="#2563eb"><title>` +
+      `${esc(e.model_label)} · ${Math.round(e.hit_rate * 100)}%</title></circle>`;
+  });
+  return svg + '</svg>';
+}
+
+function setupCompare(evals) {
+  const box = document.getElementById('cmp-box');
+  const sa = document.getElementById('cmp-a');
+  const sb = document.getElementById('cmp-b');
+  box.style.display = 'block';
+  for (const s of [sa, sb]) {
+    s.innerHTML = '';
+    for (const ev of evals) {
+      const o = document.createElement('option');
+      o.value = ev.id;
+      o.textContent = `${ev.created_at.slice(0, 16).replace('T', ' ')} ${ev.model_label}（${Math.round(ev.hit_rate * 100)}%）`;
+      s.appendChild(o);
+    }
+    s.onchange = renderCompare;
+  }
+  if (evals.length >= 2) sb.selectedIndex = 1;
+  renderCompare();
+}
+
+async function renderCompare() {
+  const a = document.getElementById('cmp-a').value;
+  const b = document.getElementById('cmp-b').value;
+  const table = document.getElementById('cmp-table');
+  if (!a || !b || a === b) { table.innerHTML = ''; return; }
+  const fetchOne = id => fetch('/api/evals/' + id, { headers: authHeaders() }).then(r => r.json());
+  const [ra, rb] = await Promise.all([fetchOne(a), fetchOne(b)]);
+  let html = '<table class="cmp"><tr><th>指标</th><th>A</th><th>B</th><th>差异</th></tr>';
+  for (const [label, key, fmt] of CMP_METRICS) {
+    const va = ra[key], vb = rb[key];
+    const diff = vb - va;
+    const diffStr = fmt(va) === fmt(vb) ? '—'
+      : (diff > 0 ? '+' : '−') + fmt(Math.abs(diff));
+    html += `<tr><td>${label}</td><td>${fmt(va)}</td><td>${fmt(vb)}</td><td>${diffStr}</td></tr>`;
+  }
+  html += '</table>';
+  table.innerHTML = html;
+}
+
+function renderEvalItem(ev) {
+  const item = el('div', 'eval-item');
+  const line1 = el('div', 'line1');
+  line1.appendChild(el('span', 'badge conf', (ev.hit_rate * 100).toFixed(0) + '%'));
+  line1.appendChild(el('span', 'id', ev.id));
+  line1.appendChild(el('span', null, ev.model_label));
+  line1.appendChild(el('span', 'hint',
+    `${ev.total} 样本 · 步数 ${ev.avg_steps.toFixed(1)} · ${(ev.created_at || '').slice(0, 19).replace('T', ' ')}`));
+  item.appendChild(line1);
+  const d = el('details', 'skill-detail');
+  d.appendChild(el('summary', null, '详情'));
+  const body = el('pre', null, '加载中…');
+  d.appendChild(body);
+  d.addEventListener('toggle', async () => {
+    if (!d.open || body.dataset.loaded) return;
+    const r = await fetch('/api/evals/' + ev.id, { headers: authHeaders() });
+    if (!r.ok) { body.textContent = '详情加载失败：' + r.status; return; }
+    const detail = await r.json();
+    const lines = detail.runs.map(x =>
+      `${x.keyword_hit ? '✓' : '✗'} ${x.fault} · 步数 ${x.steps} · ${x.elapsed_s.toFixed(1)}s · 证据 ${x.evidence_sufficiency?.toFixed(2)} — ${x.root_cause || '未定位'}`);
+    body.textContent = lines.join('\n') + `\n\n报告：${detail.report_path || '—'}`;
     body.dataset.loaded = '1';
   });
   item.appendChild(d);

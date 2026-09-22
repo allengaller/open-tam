@@ -256,6 +256,15 @@ def eval_cmd(
         f" | 证据充分性 {report.avg_evidence_sufficiency:.2f}"
         f" | 平均步数 {report.avg_steps:.1f} | 平均耗时 {report.avg_elapsed_s:.1f}s")
     typer.echo(f"eval report: {path}")
+    try:
+        from open_tam.eval import persist_eval_report
+        from open_tam.persistence.database import get_database
+
+        db = get_database(settings.database_url.replace("sqlite:///", ""))
+        run_id = persist_eval_report(db, report, path)
+        typer.echo(f"eval run saved: {run_id}")
+    except Exception as exc:
+        typer.echo(f"评测结果落库失败（不影响报告文件）: {exc}", err=True)
 
     if min_hit_rate is not None and not report.check_min_hit_rate(min_hit_rate):
         typer.echo(
@@ -282,6 +291,16 @@ def eval_compare_cmd(
     for r in report.results:
         typer.echo(f"  {r.model_label}: 命中率 {r.report.hit_rate:.0%} | 步数 {r.report.avg_steps:.1f}")
     typer.echo(f"compare report: {path}")
+    try:
+        from open_tam.eval import persist_eval_report
+        from open_tam.persistence.database import get_database
+
+        db = get_database(settings.database_url.replace("sqlite:///", ""))
+        for r in report.results:
+            run_id = persist_eval_report(db, r.report, path)
+            typer.echo(f"eval run saved: {run_id} ({r.model_label})")
+    except Exception as exc:
+        typer.echo(f"评测结果落库失败（不影响报告文件）: {exc}", err=True)
 
 
 @app.command("version")
