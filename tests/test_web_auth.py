@@ -76,9 +76,17 @@ async def test_auth_disabled_by_default_no_key_200(monkeypatch, tmp_path):
 
 
 async def test_auth_enabled_from_settings(monkeypatch, tmp_path):
-    monkeypatch.setenv("OPEN_TAM_STATE_DIR", str(tmp_path))
+    monkeypatch.setenv("OPEN_TAM_BASE_DIR", str(tmp_path))
     monkeypatch.setenv("OPEN_TAM_AUTH_ENABLED", "true")
     app = create_app()
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
         r = await c.get("/api/faults")
+    assert r.status_code == 401
+
+
+async def test_auth_enabled_invalid_key_401_with_lazy_db(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPEN_TAM_BASE_DIR", str(tmp_path))
+    app = create_app(auth_enabled=True)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+        r = await c.get("/api/faults", headers={"X-API-Key": "ot_wrong"})
     assert r.status_code == 401

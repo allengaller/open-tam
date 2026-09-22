@@ -23,14 +23,14 @@ def create_app(*, db=None, auth_enabled: bool | None = None) -> FastAPI:
         auth_enabled = settings.auth_enabled
     hub = InvestigationHub()
 
-    if auth_enabled:
-        from open_tam.auth.middleware import AuthMiddleware
-
-        app.add_middleware(AuthMiddleware, db=db, enabled=True)
     if db is None:
         from open_tam.persistence.database import get_database
 
         db = get_database(settings.database_url.replace("sqlite:///", ""))
+    if auth_enabled:
+        from open_tam.auth.middleware import AuthMiddleware
+
+        app.add_middleware(AuthMiddleware, db=db, enabled=True)
 
     @app.post("/api/investigations", status_code=202)
     async def post_investigation(request: Request, payload: dict) -> dict:
@@ -81,6 +81,13 @@ def create_app(*, db=None, auth_enabled: bool | None = None) -> FastAPI:
                     return
 
         return StreamingResponse(stream(), media_type="text/event-stream")
+
+    @app.get("/api/me")
+    async def me(request: Request) -> dict:
+        user = getattr(request.state, "user", None)
+        if user is None:
+            return {"authenticated": False}
+        return {"authenticated": True, "username": user.username, "role": user.role}
 
     @app.get("/api/history")
     async def history_list(limit: int = 20) -> dict:
