@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 
+from open_tam.config import Settings
 from open_tam.faults import FAULT_MODES, FaultState
 from open_tam.receiver.alert_receiver import normalize_alert
 from open_tam.web.events import InvestigationHub
@@ -15,9 +16,20 @@ from open_tam.web.service import start_investigation
 STATIC_DIR = Path(__file__).parent / "static"
 
 
-def create_app() -> FastAPI:
+def create_app(*, db=None, auth_enabled: bool | None = None) -> FastAPI:
     app = FastAPI(title="open-tam web")
+    settings = Settings.load()
+    if auth_enabled is None:
+        auth_enabled = settings.auth_enabled
     hub = InvestigationHub()
+
+    if auth_enabled:
+        from open_tam.auth.middleware import AuthMiddleware
+        from open_tam.persistence.database import get_database
+
+        if db is None:
+            db = get_database(settings.database_url.replace("sqlite:///", ""))
+        app.add_middleware(AuthMiddleware, db=db, enabled=True)
 
     @app.post("/api/investigations", status_code=202)
     async def post_investigation(payload: dict) -> dict:

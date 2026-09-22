@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import HTTPException, Request
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import JSONResponse, Response
 
 from open_tam.auth.apikey import verify_api_key
 from open_tam.persistence.database import Database
@@ -33,7 +33,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         api_key = self._extract_api_key(request)
         if not api_key:
-            raise HTTPException(status_code=401, detail="Missing API key")
+            return JSONResponse({"detail": "Missing API key"}, status_code=401)
 
         user_repo = UserRepository(self.db)
         users = user_repo.list_all()
@@ -42,7 +42,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 request.state.user = user
                 return await call_next(request)
 
-        raise HTTPException(status_code=401, detail="Invalid API key")
+        return JSONResponse({"detail": "Invalid API key"}, status_code=401)
 
     def _extract_api_key(self, request: Request) -> str | None:
         header = request.headers.get("X-API-Key")
