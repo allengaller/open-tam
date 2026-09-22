@@ -17,7 +17,8 @@ class Database:
         self._conn: sqlite3.Connection | None = None
 
     def connect(self) -> None:
-        self._conn = sqlite3.connect(self.db_path)
+        # 排查在后台线程回写状态，连接需跨线程使用（WAL 模式下安全）
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
@@ -138,6 +139,7 @@ def get_database(db_path: str | Path | None = None) -> Database:
     if _db_instance is None:
         if db_path is None:
             raise ValueError("db_path required on first call")
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         _db_instance = Database(db_path)
         _db_instance.connect()
         _db_instance.migrate()

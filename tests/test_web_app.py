@@ -8,6 +8,7 @@ from open_tam.web.app import create_app
 
 @pytest.fixture
 def app(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPEN_TAM_BASE_DIR", str(tmp_path))
     monkeypatch.setenv("OPEN_TAM_STATE_DIR", str(tmp_path))
     monkeypatch.setenv("OPEN_TAM_REPORTS_DIR", str(tmp_path / "reports"))
     monkeypatch.setenv("OPEN_TAM_TRACES_DIR", str(tmp_path / "traces"))

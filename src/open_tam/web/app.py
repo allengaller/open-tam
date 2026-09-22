@@ -4,7 +4,7 @@ import asyncio
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, StreamingResponse
 
 from open_tam.config import Settings
@@ -25,16 +25,24 @@ def create_app(*, db=None, auth_enabled: bool | None = None) -> FastAPI:
 
     if auth_enabled:
         from open_tam.auth.middleware import AuthMiddleware
+
+        app.add_middleware(AuthMiddleware, db=db, enabled=True)
+    if db is None:
         from open_tam.persistence.database import get_database
 
-        if db is None:
-            db = get_database(settings.database_url.replace("sqlite:///", ""))
-        app.add_middleware(AuthMiddleware, db=db, enabled=True)
+        db = get_database(settings.database_url.replace("sqlite:///", ""))
 
     @app.post("/api/investigations", status_code=202)
-    async def post_investigation(payload: dict) -> dict:
+    async def post_investigation(request: Request, payload: dict) -> dict:
         if not isinstance(payload, dict) or "alert" not in payload:
             raise HTTPException(status_code=422, detail="payload must contain 'alert'")
+        user = getattr(request.state, "user", None)
+        if user is not None:
+            from open_tam.auth.roles import has_permission
+
+            if not has_permission(user.role, "investigate"):
+                raise HTTPException(status_code=403,
+                                    detail="role does not allow investigate")
         try:
             alert = normalize_alert(payload["alert"])
         except Exception as exc:
@@ -44,7 +52,8 @@ def create_app(*, db=None, auth_enabled: bool | None = None) -> FastAPI:
             hub, alert,
             fake=bool(payload.get("fake", False)),
             transport=str(payload.get("transport", "inline")),
-            loop=loop,
+            loop=loop, db=db,
+            user_id=user.id if user is not None else None,
         )
         return {"id": inv.id, "status": inv.status}
 
