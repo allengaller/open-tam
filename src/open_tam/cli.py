@@ -57,9 +57,13 @@ def logs_query(
 
 
 @fault_app.command("inject")
-def fault_inject(name: str, duration: int = typer.Option(30)) -> None:
-    FaultState().activate(name, duration_minutes=duration)
-    typer.echo(f"fault {name} activated for {duration}min")
+def fault_inject(
+    name: str,
+    duration: int = typer.Option(30),
+    region: str = typer.Option(None, help="可选，区域名（缺省全局生效）"),
+) -> None:
+    FaultState().activate(name, duration_minutes=duration, region=region)
+    typer.echo(f"fault {name} activated for {duration}min" + (f" @ {region}" if region else ""))
 
 
 @fault_app.command("clear")

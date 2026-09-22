@@ -25,6 +25,7 @@ def generate_logs(
     step_seconds: int = 60,
     seed: int = 42,
     state: FaultState | None = None,
+    region: str = "cn-hangzhou",
 ) -> list[LogRecord]:
     rng = random.Random(seed)
     records: list[LogRecord] = []
@@ -41,6 +42,9 @@ def generate_logs(
                 continue
             win = state.window(mode.name)
             if not win:
+                continue
+            fault_region = state.region_of(mode.name)
+            if fault_region and fault_region != region:
                 continue
             t = max(win[0], start)
             while t <= min(win[1], end):

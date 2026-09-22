@@ -33,6 +33,7 @@ from open_tam.orchestrator.tools import (
     GuardrailsBackend,
     InlineBackend,
     McpStdioBackend,
+    MultiRegionBackend,
 )
 from open_tam.reporting.report import save_report
 from open_tam.skills.loader import SkillLoader
@@ -69,7 +70,10 @@ def run_investigation(
     （CLI 不传 sink；Web 传 sink 做流式广播）。confirmer 决定敏感操作
     的人工确认方式：默认 None → AutoDeny；Web 传 WebConfirmer 走 SSE 弹窗。
     """
-    leaf_backend = InlineBackend() if transport == "inline" else McpStdioBackend()
+    make_leaf = (lambda region: InlineBackend()) if transport == "inline" else (lambda region: McpStdioBackend())
+    # 多区域配置：region-aware 工具并行 fan-out 各区域；单区域走直连
+    leaf_backend = (MultiRegionBackend(list(settings.regions), make_leaf)
+                    if len(settings.regions) > 1 else make_leaf(settings.aliyun_region))
 
     now = datetime.now().replace(second=0, microsecond=0)
     window = {"start": (now - timedelta(minutes=60)).isoformat(), "end": now.isoformat()}

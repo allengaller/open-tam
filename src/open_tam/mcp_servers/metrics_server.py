@@ -13,7 +13,8 @@ mcp = FastMCP("mock-metrics")
 
 
 @mcp.tool()
-def query_metrics(metric: str, service: str, start: str, end: str) -> str:
+def query_metrics(metric: str, service: str, start: str, end: str,
+                  region: str = "cn-hangzhou") -> str:
     """查询某服务某指标的时序数据。start/end 为 ISO 8601 时间，返回 JSON 数组字符串 [{ts, value}]。"""
     points = generate_series(
         metric=metric,
@@ -21,6 +22,7 @@ def query_metrics(metric: str, service: str, start: str, end: str) -> str:
         start=parse_iso_local(start),
         end=parse_iso_local(end),
         state=FaultState(),
+        region=region,
     )
     return json.dumps(
         [{"ts": p.ts.isoformat(), "value": p.value} for p in points],

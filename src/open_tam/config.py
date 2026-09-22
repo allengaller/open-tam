@@ -18,6 +18,7 @@ class Settings:
     char_budget: int
     metrics_backend: str
     logs_backend: str
+    regions: tuple[str, ...]
     aliyun_region: str
     aliyun_access_key_id: str
     aliyun_access_key_secret: str
@@ -48,6 +49,7 @@ class Settings:
             char_budget=int(os.environ.get("OPEN_TAM_CHAR_BUDGET", "60000")),
             metrics_backend=os.environ.get("OPEN_TAM_METRICS_BACKEND", "mock"),
             logs_backend=os.environ.get("OPEN_TAM_LOGS_BACKEND", "mock"),
+            regions=tuple(r.strip() for r in os.environ.get("OPEN_TAM_REGIONS", "").split(",") if r.strip()),
             aliyun_region=os.environ.get("OPEN_TAM_ALIYUN_REGION", "cn-hangzhou"),
             aliyun_access_key_id=os.environ.get("OPEN_TAM_ALIYUN_ACCESS_KEY_ID", os.environ.get("ALIYUN_ACCESS_KEY_ID", "")),
             aliyun_access_key_secret=os.environ.get("OPEN_TAM_ALIYUN_ACCESS_KEY_SECRET", os.environ.get("ALIYUN_ACCESS_KEY_SECRET", "")),

@@ -149,7 +149,9 @@ class FaultState:
     def _save(self, data: dict) -> None:
         self.file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    def activate(self, name: str, duration_minutes: int = 30) -> None:
+    def activate(self, name: str, duration_minutes: int = 30,
+                 region: str | None = None) -> None:
+        """注入故障。region=None 表示全局生效；指定 region 时仅该区域异常。"""
         if name not in FAULT_MODES:
             raise KeyError(f"unknown fault mode: {name}")
         data = self._load()
@@ -157,6 +159,7 @@ class FaultState:
         data[name] = {
             "activated_at": datetime.now().replace(second=0, microsecond=0).isoformat(),
             "duration_minutes": duration_minutes,
+            **({"region": region} if region else {}),
         }
         self._save(data)
 
@@ -172,9 +175,18 @@ class FaultState:
         start = datetime.fromisoformat(entry["activated_at"])
         return start, start + timedelta(minutes=entry["duration_minutes"])
 
-    def is_active(self, name: str, now: datetime | None = None) -> bool:
+    def region_of(self, name: str) -> str | None:
+        entry = self._load().get(name)
+        return entry.get("region") if entry else None
+
+    def is_active(self, name: str, now: datetime | None = None,
+                  region: str | None = None) -> bool:
         win = self.window(name)
         if not win:
+            return False
+        # 查询方 region=None 表示不过滤；全局故障对任意区域生效
+        fault_region = self.region_of(name)
+        if fault_region and region and fault_region != region:
             return False
         now = now or datetime.now()
         return win[0] <= now <= win[1]

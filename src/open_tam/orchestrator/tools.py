@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol
+from typing import Callable, Protocol
 
 from open_tam.faults import FaultState
 from open_tam.guardrails import Guardrails
@@ -22,6 +23,7 @@ QUERY_METRICS_SPEC = {
             "service": {"type": "string", "description": "服务名，如 demo-app"},
             "start": {"type": "string", "description": "起始时间 ISO 8601"},
             "end": {"type": "string", "description": "结束时间 ISO 8601"},
+            "region": {"type": "string", "description": "可选，区域名（跨区域排查时区分数据来源）"},
         },
         "required": ["metric", "service", "start", "end"],
     },
@@ -38,6 +40,7 @@ QUERY_LOGS_SPEC = {
             "end": {"type": "string", "description": "结束时间 ISO 8601"},
             "level": {"type": "string", "description": "可选，INFO/WARN/ERROR"},
             "keyword": {"type": "string", "description": "可选，消息子串（不区分大小写）"},
+            "region": {"type": "string", "description": "可选，区域名（跨区域排查时区分数据来源）"},
         },
         "required": ["service", "start", "end"],
     },
@@ -101,13 +104,15 @@ ALL_TOOLS: list[dict] = [
 ]
 
 
-def query_metrics_inline(metric: str, service: str, start: str, end: str) -> str:
+def query_metrics_inline(metric: str, service: str, start: str, end: str,
+                         region: str = "cn-hangzhou") -> str:
     points = generate_series(
         metric=metric,
         service=service,
         start=parse_iso_local(start),
         end=parse_iso_local(end),
         state=FaultState(),
+        region=region,
     )
     return json.dumps(
         [{"ts": p.ts.isoformat(), "value": p.value} for p in points],
@@ -138,7 +143,8 @@ class InlineBackend:
         return json.dumps({"error": f"unknown tool: {name}"})
 
 
-def query_logs_inline(service: str, start: str, end: str, level: str | None = None, keyword: str | None = None) -> str:
+def query_logs_inline(service: str, start: str, end: str, level: str | None = None,
+                      keyword: str | None = None, region: str = "cn-hangzhou") -> str:
     records = generate_logs(
         service=service,
         start=datetime.fromisoformat(start),
@@ -146,6 +152,7 @@ def query_logs_inline(service: str, start: str, end: str, level: str | None = No
         level=level,
         keyword=keyword,
         state=FaultState(),
+        region=region,
     )
     return json.dumps(
         [{"ts": r.ts.isoformat(), "level": r.level, "message": r.message} for r in records],
@@ -199,6 +206,35 @@ class McpStdioBackend:
                 _server_command as metrics_cmd,
             )
             return metrics_cmd()
+
+
+REGION_AWARE_TOOLS = {"query_metrics", "query_logs"}
+
+
+class MultiRegionBackend:
+    """跨区域 fan-out：region-aware 工具并行查所有区域并聚合，单区域错误隔离；其余工具透传主区域。"""
+
+    def __init__(self, regions: list[str],
+                 backend_factory: Callable[[str], Backend] | None = None) -> None:
+        self.regions = list(regions)
+        self._make = backend_factory or (lambda region: InlineBackend())
+
+    def execute(self, name: str, args: dict) -> str:
+        if name not in REGION_AWARE_TOOLS or len(self.regions) <= 1:
+            return self._make(self.regions[0]).execute(name, args)
+        with ThreadPoolExecutor(max_workers=len(self.regions)) as ex:
+            futures = {
+                region: ex.submit(self._make(region).execute, name, {**args, "region": region})
+                for region in self.regions
+            }
+            out = []
+            for region, fut in futures.items():
+                try:
+                    out.append({"region": region, "result": json.loads(fut.result())})
+                except Exception as exc:
+                    out.append({"region": region, "error": f"{type(exc).__name__}: {exc}"})
+        return json.dumps({"regions": out}, ensure_ascii=False)
+
 
 ASK_METRIC_AGENT_SPEC = {
     "name": "ask_metric_agent",
