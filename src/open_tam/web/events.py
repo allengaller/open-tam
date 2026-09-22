@@ -71,12 +71,14 @@ class InvestigationHub:
         return Subscription(snapshot=snapshot, queue=queue)
 
     def finish(self, investigation_id: str, *, report_path: str, root_cause: str | None,
-               confidence: str, evidence: list[str], actions: list[str]) -> None:
+               confidence: str, evidence: list[str], actions: list[str],
+               skill_used: dict | None = None) -> None:
         inv = self._investigations[investigation_id]
         inv.status = "done"
         self.sink_for(investigation_id)({
             "kind": "done", "report_path": report_path, "root_cause": root_cause,
             "confidence": confidence, "evidence": evidence, "actions": actions,
+            "skill_used": skill_used,
         })
 
     def fail(self, investigation_id: str, error: str) -> None:

@@ -75,6 +75,18 @@
   .badge.error { background:#fee2e2; color:#991b1b; }
   .hist-item .cause { font-size:12px; color:var(--dim); margin-top:2px;
                       overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  /* 知识库视图 */
+  #view-skills { display:none; }
+  .skill-item { background:var(--card); border:1px solid var(--line); border-radius:10px;
+                padding:10px 14px; }
+  .skill-item .line1 { display:flex; gap:10px; align-items:center; font-size:13px; }
+  .skill-item .skill-name { font-weight:600; }
+  .skill-item .pat { font-family:ui-monospace,monospace; color:var(--dim); font-size:12px; }
+  .skill-item .del { margin-left:auto; }
+  .badge.conf { background:#dbeafe; color:#1e40af; font-family:ui-monospace,monospace; }
+  .skill-detail { margin-top:6px; }
+  .skill-detail pre { margin:6px 0 0; padding:8px; background:#f1f3f5; border-radius:6px;
+                      overflow:auto; font-size:12px; white-space:pre-wrap; word-break:break-all; }
 </style>
 </head>
 <body>
@@ -82,6 +94,7 @@
   <h1>open-tam · SRE Agent</h1>
   <button class="tab active" id="tab-investigate">排查台</button>
   <button class="tab" id="tab-history">排查历史</button>
+  <button class="tab" id="tab-skills">知识库</button>
   <span id="fault-bar"><span class="hint">故障模板：</span><span id="faults"></span></span>
   <span id="user-box"></span>
 </header>
@@ -92,6 +105,10 @@
   <div class="hint" id="hist-hint">加载中…</div>
   <div id="hist-list" style="display:flex;flex-direction:column;gap:8px;"></div>
   <div id="hist-detail"></div>
+</main>
+<main id="view-skills">
+  <div class="hint" id="skills-hint">加载中…</div>
+  <div id="skills-list" style="display:flex;flex-direction:column;gap:8px;"></div>
 </main>
 <footer id="composer-bar">
   <div class="composer">
@@ -140,19 +157,24 @@ function authHeaders(extra) {
 /* ---------- 视图切换 ---------- */
 const viewInv = document.getElementById('view-investigate');
 const viewHist = document.getElementById('view-history');
+const viewSkills = document.getElementById('view-skills');
 function showTab(name) {
   viewInv.style.display = name === 'investigate' ? 'flex' : 'none';
   viewHist.style.display = name === 'history' ? 'flex' : 'none';
+  viewSkills.style.display = name === 'skills' ? 'flex' : 'none';
   document.getElementById('composer-bar').style.display =
     name === 'investigate' ? 'block' : 'none';
   document.getElementById('fault-bar').style.display =
     name === 'investigate' ? 'inline' : 'none';
-  document.getElementById('tab-investigate').classList.toggle('active', name === 'investigate');
-  document.getElementById('tab-history').classList.toggle('active', name === 'history');
+  for (const t of ['investigate', 'history', 'skills']) {
+    document.getElementById('tab-' + t).classList.toggle('active', name === t);
+  }
   if (name === 'history') loadHistory();
+  if (name === 'skills') loadSkills();
 }
 document.getElementById('tab-investigate').onclick = () => showTab('investigate');
 document.getElementById('tab-history').onclick = () => showTab('history');
+document.getElementById('tab-skills').onclick = () => showTab('skills');
 
 /* ---------- 排查台 ---------- */
 function addUserCard(alertJson) {
@@ -193,6 +215,10 @@ function addReport(ev) {
   const m = el('div', 'msg report');
   m.appendChild(el('h3', null, '根因报告'));
   m.appendChild(el('div', null, ev.root_cause || '未定位根因'));
+  if (ev.skill_used) {
+    m.appendChild(el('div', 'conf', '参考了 1 条历史经验：' + ev.skill_used.name +
+      '（置信度 ' + ev.skill_used.confidence.toFixed(2) + '）'));
+  }
   m.appendChild(el('div', 'conf', '置信度：' + (ev.confidence || '—') + '　报告：' + (ev.report_path || '—')));
   if (ev.evidence && ev.evidence.length) {
     const d = el('details'); d.appendChild(el('summary', null, '证据（' + ev.evidence.length + '）'));
@@ -368,6 +394,57 @@ async function showHistoryDetail(id) {
     '　trace：' + (inv.trace_path || '—')));
   detail.appendChild(m);
   detail.scrollIntoView({ behavior: 'smooth' });
+}
+
+/* ---------- 知识库 ---------- */
+async function loadSkills() {
+  const hint = document.getElementById('skills-hint');
+  const list = document.getElementById('skills-list');
+  const r = await fetch('/api/skills', { headers: authHeaders() });
+  if (r.status === 401) { showLogin(); return; }
+  if (!r.ok) { hint.textContent = '知识库加载失败：' + r.status; return; }
+  const { skills } = await r.json();
+  list.innerHTML = '';
+  if (!skills.length) {
+    hint.textContent = '（知识库为空。用 `open-tam skill learn --traces traces/` 从排查历史提取）';
+    return;
+  }
+  hint.textContent = '共 ' + skills.length + ' 条经验（按置信度降序）：';
+  for (const s of skills) list.appendChild(renderSkill(s));
+}
+
+function renderSkill(s) {
+  const item = el('div', 'skill-item');
+  const line1 = el('div', 'line1');
+  line1.appendChild(el('span', 'skill-name', s.name));
+  line1.appendChild(el('span', 'badge conf', s.confidence.toFixed(2)));
+  line1.appendChild(el('span', 'pat', s.alert_pattern + ' · ' + s.service_pattern));
+  const del = el('button', 'fault-btn del', '删除');
+  del.onclick = async () => {
+    if (!window.confirm('删除 Skill「' + s.name + '」？')) return;
+    const r = await fetch('/api/skills/' + s.id,
+                          { method: 'DELETE', headers: authHeaders() });
+    if (r.status === 403) { item.appendChild(el('div', 'hint', '当前角色无 manage_skills 权限')); return; }
+    if (!r.ok) { item.appendChild(el('div', 'hint', '删除失败：' + r.status)); return; }
+    item.remove();
+  };
+  line1.appendChild(del);
+  item.appendChild(line1);
+  if (s.description) item.appendChild(el('div', 'cause', s.description));
+  const d = el('details', 'skill-detail');
+  d.appendChild(el('summary', null, '详情'));
+  const body = el('pre', null, '加载中…');
+  d.appendChild(body);
+  d.addEventListener('toggle', async () => {
+    if (!d.open || body.dataset.loaded) return;
+    const r = await fetch('/api/skills/' + s.id, { headers: authHeaders() });
+    body.textContent = r.ok
+      ? JSON.stringify(await r.json(), null, 2)
+      : '详情加载失败：' + r.status;
+    body.dataset.loaded = '1';
+  });
+  item.appendChild(d);
+  return item;
 }
 
 /* ---------- 登录 ---------- */

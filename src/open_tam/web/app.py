@@ -126,6 +126,42 @@ def create_app(*, db=None, auth_enabled: bool | None = None) -> FastAPI:
                 "trace_path": r.trace_path, "created_at": r.created_at,
                 "updated_at": r.updated_at}
 
+    @app.get("/api/skills")
+    async def skills_list() -> dict:
+        from open_tam.skills.loader import SkillLoader
+
+        skills = SkillLoader(settings.skills_dir).load_all()
+        return {"skills": [
+            {"id": s.id, "name": s.name, "alert_pattern": s.alert_pattern,
+             "service_pattern": s.service_pattern, "description": s.description,
+             "confidence": s.confidence}
+            for s in sorted(skills, key=lambda x: x.confidence, reverse=True)
+        ]}
+
+    @app.get("/api/skills/{skill_id}")
+    async def skill_detail(skill_id: str) -> dict:
+        from open_tam.skills.loader import SkillLoader
+
+        skill = SkillLoader(settings.skills_dir).get(skill_id)
+        if skill is None:
+            raise HTTPException(status_code=404, detail="unknown skill")
+        return skill.model_dump()
+
+    @app.delete("/api/skills/{skill_id}")
+    async def skill_delete(request: Request, skill_id: str) -> dict:
+        from open_tam.skills.loader import SkillLoader
+
+        user = getattr(request.state, "user", None)
+        if user is not None:
+            from open_tam.auth.roles import has_permission
+
+            if not has_permission(user.role, "manage_skills"):
+                raise HTTPException(status_code=403,
+                                    detail="role does not allow manage_skills")
+        if not SkillLoader(settings.skills_dir).delete(skill_id):
+            raise HTTPException(status_code=404, detail="unknown skill")
+        return {"deleted": skill_id}
+
     @app.get("/api/faults")
     async def list_faults() -> dict:
         return {"faults": [

@@ -112,6 +112,19 @@ def _persist_start(db, inv: Investigation, alert: AlertEvent, user_id: str | Non
         pass
 
 
+def _match_skill(alert: AlertEvent, settings: Settings) -> dict | None:
+    """与 run_investigation 相同的 Skill 匹配，用于 done 事件展示。"""
+    try:
+        from open_tam.skills.loader import SkillLoader
+
+        skill = SkillLoader(settings.skills_dir).match(alert.alert_name, alert.service)
+        if skill:
+            return {"name": skill.name, "confidence": skill.confidence}
+    except Exception:
+        pass
+    return None
+
+
 def _run(hub: InvestigationHub, inv: Investigation, loop: asyncio.AbstractEventLoop,
          db) -> None:
     settings = Settings.load()
@@ -138,7 +151,7 @@ def _run(hub: InvestigationHub, inv: Investigation, loop: asyncio.AbstractEventL
              trace_path=str(trace.path))
     hub.finish(inv.id, report_path=str(path), root_cause=result.root_cause,
                confidence=result.confidence, evidence=result.evidence,
-               actions=result.actions)
+               actions=result.actions, skill_used=_match_skill(inv.alert, settings))
 
 
 def _mark_db(db, inv_id: str, *, status: str, root_cause: str | None = None,
