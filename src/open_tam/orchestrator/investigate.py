@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from open_tam.actions import ACTION_REGISTRY
 from open_tam.config import Settings
-from open_tam.guardrails import AuditLogger, AutoDeny, Guardrails
+from open_tam.guardrails import AuditLogger, AutoDeny, Confirmer, Guardrails
 from open_tam.models import AlertEvent
 from open_tam.orchestrator.agents import (
     K8S_AGENT_PROMPT,
@@ -61,11 +61,13 @@ def run_investigation(
     metric_trace: TraceRecorder,
     log_trace: TraceRecorder,
     k8s_trace: TraceRecorder | None = None,
+    confirmer: Confirmer | None = None,
 ) -> tuple[DiagnosisResult, object]:
     """orchestrator 三子 Agent 排查闭环：运行 ReActLoop 并落盘报告。
 
     返回 (DiagnosisResult, 报告路径)。trace recorder 由调用方创建
-    （CLI 不传 sink；Web 传 sink 做流式广播）。
+    （CLI 不传 sink；Web 传 sink 做流式广播）。confirmer 决定敏感操作
+    的人工确认方式：默认 None → AutoDeny；Web 传 WebConfirmer 走 SSE 弹窗。
     """
     leaf_backend = InlineBackend() if transport == "inline" else McpStdioBackend()
 
@@ -137,7 +139,7 @@ def run_investigation(
         "ask_k8s_agent": k8s_agent,
     })
     guardrails = Guardrails(ACTION_REGISTRY, AuditLogger(settings.state_dir),
-                            confirmer=AutoDeny())
+                            confirmer=confirmer if confirmer is not None else AutoDeny())
     backend = GuardrailsBackend(backend, guardrails, actor="agent")
     system_prompt = _build_system_prompt(alert, settings, ORCHESTRATOR_PROMPT)
     loop = ReActLoop(model=orch_model, backend=backend, max_steps=settings.max_steps,

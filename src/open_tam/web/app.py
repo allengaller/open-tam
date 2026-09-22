@@ -82,6 +82,18 @@ def create_app(*, db=None, auth_enabled: bool | None = None) -> FastAPI:
 
         return StreamingResponse(stream(), media_type="text/event-stream")
 
+    @app.post("/api/investigations/{investigation_id}/confirm")
+    async def confirm_action(investigation_id: str, payload: dict) -> dict:
+        inv = hub.get(investigation_id)
+        if inv is None or inv.confirmer is None:
+            raise HTTPException(status_code=404, detail="unknown investigation")
+        request_id = str(payload.get("request_id", ""))
+        approved = bool(payload.get("approved", False))
+        if not inv.confirmer.resolve(request_id, approved):
+            raise HTTPException(status_code=409,
+                                detail="no pending confirmation for this request_id")
+        return {"resolved": True, "approved": approved}
+
     @app.get("/api/me")
     async def me(request: Request) -> dict:
         user = getattr(request.state, "user", None)

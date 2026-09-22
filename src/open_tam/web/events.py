@@ -26,6 +26,7 @@ class Investigation:
     events: list[dict] = field(default_factory=list)
     subscribers: list[tuple[asyncio.Queue, asyncio.AbstractEventLoop]] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    confirmer: object | None = field(default=None, repr=False)
 
 
 class InvestigationHub:

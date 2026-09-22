@@ -34,6 +34,7 @@
   .ev { border-left:3px solid var(--orch); }
   .ev.metric { border-left-color:var(--metric); }
   .ev.log { border-left-color:var(--log); }
+  .ev.confirm { border-left-color:#d97706; }
   .ev.error, .msg.report.error { border-left-color:var(--err); }
   .ev .tool { font-family:ui-monospace,monospace; font-size:12px; }
   details { margin-top:6px; } summary { cursor:pointer; color:var(--dim); font-size:12px; }
@@ -165,6 +166,7 @@ function addEvent(ev) {
   if (ev.kind === 'alert_received') return;
   if (ev.kind === 'done') return addReport(ev);
   if (ev.kind === 'error') return addError(ev);
+  if (ev.kind === 'confirm_request') return addConfirm(ev);
   const agent = ev.agent;
   const cls = 'msg ev' + (agent ? ' ' + agent : '');
   const m = el('div', cls);
@@ -215,6 +217,38 @@ function addError(ev) {
 function finish(text) {
   statusEl.textContent = text;
   sendBtn.disabled = false;
+}
+
+/* ---------- 敏感操作人工确认（M7-B） ---------- */
+let currentInvId = null;
+
+function addConfirm(ev) {
+  const m = el('div', 'msg ev confirm');
+  m.appendChild(el('div', 'who', '待人工确认 · 敏感操作'));
+  m.appendChild(el('div', null, 'Agent 请求执行敏感操作：' + ev.action));
+  m.appendChild(el('pre', null, JSON.stringify(ev.arguments, null, 2)));
+  const row = el('div', 'row');
+  const yes = el('button', 'send', '批准执行');
+  const no = el('button', 'fault-btn', '拒绝');
+  yes.onclick = () => decide(ev.request_id, true, yes, no);
+  no.onclick = () => decide(ev.request_id, false, yes, no);
+  row.appendChild(yes); row.appendChild(no);
+  m.appendChild(row);
+  timeline.appendChild(m); scrollBottom();
+}
+
+async function decide(requestId, approved, yes, no) {
+  yes.disabled = true; no.disabled = true;
+  const r = await fetch('/api/investigations/' + currentInvId + '/confirm', {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify({ request_id: requestId, approved }),
+  });
+  const res = el('div', 'who', r.ok
+    ? (approved ? '已批准，继续执行' : '已拒绝，操作未执行')
+    : (r.status === 409 ? '裁决失败：确认已过期或已被处理（超时将视为拒绝）'
+                        : '裁决失败：' + r.status));
+  yes.parentElement.appendChild(res); scrollBottom();
 }
 
 async function loadFaults() {
@@ -287,6 +321,7 @@ sendBtn.onclick = async () => {
     return;
   }
   const { id } = await r.json();
+  currentInvId = id;
   await streamEvents(id);
 };
 
