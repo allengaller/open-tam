@@ -61,8 +61,8 @@
 - [x] `open-tam skill learn` 从 trace 中提取排查模板
 - [x] Skill YAML 存储 + 匹配 + 注入 ReAct system prompt
 - [x] `open-tam skill list/create/delete/show` 管理命令
-- [ ] Web UI 知识库标签页
-- **验收**：历史排查经验被自动提取为 Skill，新排查时 Skill 被加载并影响排查路径 ✅（2026-09-22 核验，commit cc4be71；`skill learn` 从 traces/ 批量提取工具调用序列 + 根因模板，按告警名/服务 fnmatch 聚合，每条 trace 置信度 +0.1；排查时匹配最高置信度模板注入 orchestrator system prompt；`skill list/show/delete` CLI 冒烟通过；test_m6_skills.py 全绿。Web UI 知识库标签页未实现，见 M6 设计 §3.6）
+- [x] Web UI 知识库标签页
+- **验收**：历史排查经验被自动提取为 Skill，新排查时 Skill 被加载并影响排查路径 ✅（2026-09-22 核验，commit cc4be71；`skill learn` 从 traces/ 批量提取工具调用序列 + 根因模板，按告警名/服务 fnmatch 聚合，每条 trace 置信度 +0.1；排查时匹配最高置信度模板注入 orchestrator system prompt；`skill list/show/delete` CLI 冒烟通过；test_m6_skills.py 全绿）。Web UI 知识库标签页 ✅（2026-09-22，commit 1a26ff9；GET /api/skills 置信度降序 + /{id} 详情懒加载 + DELETE 仅 manage_skills 角色（viewer/operator 403）；done 事件带 skill_used，前端显示"参考了 1 条历史经验"；浏览器实测列表/详情/删除/403 提示；test_web_skills.py 9 例全绿）
 
 ## M7 多租户与生产化
 
@@ -72,8 +72,8 @@
 - [x] API Key 认证 + 角色权限（admin / operator / viewer）
 - [x] 通知集成（钉钉 / 飞书 / Slack webhook）
 - [x] 排查历史持久化 + 检索 API
-- [ ] Web UI 登录 + 历史列表 + 敏感操作 Web 确认
-- **验收**：CLI 侧多租户能力全绿（2026-09-22 核验，commit 1520483；SQLite WAL 持久化 users/investigations/alerts/audit_entries + `db migrate` 版本迁移；AuthMiddleware X-API-Key/Bearer + 三角色权限集测试全绿（test_m7_multitenant.py）；钉钉/飞书/Slack webhook fail-soft；`user create/list/delete`、`history list/show` CLI 冒烟通过。Web UI 登录/历史列表/确认弹窗未实现（AuthMiddleware 已就绪未挂载 serve），见 M7 设计 §3.5）
+- [x] Web UI 登录 + 历史列表 + 敏感操作 Web 确认
+- **验收**：CLI 侧多租户能力全绿（2026-09-22 核验，commit 1520483；SQLite WAL 持久化 users/investigations/alerts/audit_entries + `db migrate` 版本迁移；AuthMiddleware X-API-Key/Bearer + 三角色权限集测试全绿（test_m7_multitenant.py）；钉钉/飞书/Slack webhook fail-soft；`user create/list/delete`、`history list/show` CLI 冒烟通过）。Web UI ✅（2026-09-22：登录遮罩 + 排查历史标签页 commit 6d71d61；敏感操作 Web 确认 commit e458993——SSE confirm_request 弹窗 + POST /api/investigations/{id}/confirm 裁决，WebConfirmer 线程阻塞 120s 超时 fail-safe 拒绝，CLI 路径保持 AutoDeny 不变；test_web_confirm.py 7 例全绿，含真 uvicorn 端口 SSE 中途确认端到端）
 
 ## M8 K8s 与基础设施排障
 
@@ -93,8 +93,8 @@
 - [x] LLM-as-Judge 证据充分性评分
 - [x] A/B 模型对比评测（`open-tam eval --compare`）
 - [x] CI 集成回归评测（`--min-hit-rate` 阈值）
-- [ ] Web UI 评测标签页（趋势图 + 详情）
-- **验收**：CI 每次 PR 自动跑评测，命中率低于阈值告警 ✅（2026-09-22 冒烟，commit 7fe288e；`eval --fake --min-hit-rate 0.8` 跑通全部 8 种故障模式：定位率 100% / 关键词命中率 100% / 平均步数 3.0，退出码 0，报告落盘 reports/eval-*.md；EvidenceJudge LLM-as-Judge 证据充分性 0–1 锚定评分纳入评测；`eval-compare` A/B 多模型对比 Markdown 报告；定位率低于阈值退出码 1 可接 CI；test_m9_eval.py 全绿。Web UI 评测标签页未实现，见 M9 设计 §3.5）
+- [x] Web UI 评测标签页（趋势图 + 详情）
+- **验收**：CI 每次 PR 自动跑评测，命中率低于阈值告警 ✅（2026-09-22 冒烟，commit 7fe288e；`eval --fake --min-hit-rate 0.8` 跑通全部 8 种故障模式：定位率 100% / 关键词命中率 100% / 平均步数 3.0，退出码 0，报告落盘 reports/eval-*.md；EvidenceJudge LLM-as-Judge 证据充分性 0–1 锚定评分纳入评测；`eval-compare` A/B 多模型对比 Markdown 报告；定位率低于阈值退出码 1 可接 CI；test_m9_eval.py 全绿）。Web UI 评测标签页 ✅（2026-09-22，commit 0cc83a1；eval 结果落库 eval_runs（schema v2 迁移），GET /api/evals 趋势列表 + /{id} 含 runs 明细；前端 SVG 折线趋势图 + A/B 对比表 + 详情懒加载；test_web_evals.py 7 例全绿）
 
 ## M10 告警风暴与高级编排
 
@@ -103,8 +103,8 @@
 - [x] 告警关联聚合（时间窗口 + 服务重叠 + 指标相关性）
 - [x] 优先级排查队列（P0 抢占 P2）
 - [x] 修复 Playbook 编排（YAML 定义 + 护栏逐条执行）
-- [ ] 跨集群/跨区域排查
-- **验收**：关联告警聚合与 Playbook 编排全绿（2026-09-22 核验，commit 86bd6ab；AlertCorrelator 时间窗口 + 服务重叠 + 依赖配置聚合告警风暴为 AlertGroup；PriorityQueue（heapq）P0–P3 分级、P0 抢占 P2；修复 Playbook YAML 编排经 Guardrails 逐条执行，on_failure=abort/continue/rollback + confidence_threshold 门槛；test_m10_storm.py 全绿。跨集群/跨区域排查未实现，见 M10 设计"跨区域=多个 MCP 后端实例并行查询"）
+- [x] 跨集群/跨区域排查
+- **验收**：关联告警聚合与 Playbook 编排全绿（2026-09-22 核验，commit 86bd6ab；AlertCorrelator 时间窗口 + 服务重叠 + 依赖配置聚合告警风暴为 AlertGroup；PriorityQueue（heapq）P0–P3 分级、P0 抢占 P2；修复 Playbook YAML 编排经 Guardrails 逐条执行，on_failure=abort/continue/rollback + confidence_threshold 门槛；test_m10_storm.py 全绿）。跨集群/跨区域排查 ✅（2026-09-22，commit d81e505；FaultState.activate 支持 region 区域隔离（无 region 故障全局生效，兼容旧用法），query_metrics/query_logs 的 region 参数下沉 mock 数据层与 MCP server；MultiRegionBackend 线程池并行 fan-out 所有区域并聚合 {"regions": [...]}，单区域错误隔离、k8s 类无 region 工具透传主区域不包壳；OPEN_TAM_REGIONS 多区域配置接入 investigate 自动 fan-out，CLI `fault inject --region`；冒烟：cpu_spike @ cn-hangzhou 杭州峰值 92.95 异常 / 上海 33.04 正常；test_m10_regions.py 10 例全绿）
 
 ## 行为评测（随 M2 起持续）
 

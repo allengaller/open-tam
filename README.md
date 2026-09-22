@@ -65,6 +65,7 @@ flowchart TB
         direction LR
         IB[InlineBackend<br/>直连本地 mock 函数]
         MCP[McpStdioBackend<br/>按 metrics_backend / logs_backend<br/>配置路由 mock 或 aliyun]
+        MRB[MultiRegionBackend<br/>OPEN_TAM_REGIONS 多区域<br/>并行 fan-out + 错误隔离聚合]
         MM[mock-metrics<br/>mock-logs]
         ALI[aliyun-metrics CMS<br/>aliyun-logs SLS]
         K8S[mock-k8s<br/>K8sGPT 风格 4 工具]
@@ -72,6 +73,8 @@ flowchart TB
         MCP --> MM
         MCP --> ALI
         MCP --> K8S
+        MRB -.多区域 fan-out.-> IB
+        MRB -.多区域 fan-out.-> MCP
     end
 
     MA --> IB
@@ -159,7 +162,7 @@ flowchart TB
 | 能力 | 说明 |
 |---|---|
 | CI | GitHub Actions：`uv sync --frozen` → `ruff check .` → `pytest -q` |
-| 测试 | 244 passed / 1 skipped，33 个测试文件，覆盖单测 + 集成 + CLI + 全部里程碑，~6s |
+| 测试 | 294 passed / 1 skipped，34 个测试文件，覆盖单测 + 集成 + CLI + 全部里程碑 |
 | Lint | ruff（E4/E7/E9/F/I/B/UP），target py312 |
 | 包管理 | uv + hatchling，`uv.lock` 锁定依赖 |
 | GTM 落地页 | `GTM/index.html` 单文件静态页，零构建，可直接部署 |
@@ -190,6 +193,7 @@ flowchart TB
 | trace → Skill | `skill learn` 批量从 traces 提取工具调用序列 + 根因模板，按告警名/服务 fnmatch 聚合，每多一条 trace 置信度 +0.1 |
 | Skill 注入 | 排查时按告警名匹配最高置信度模板，拼入 orchestrator system prompt |
 | Skill 管理 | YAML 存储：`skill learn / list / show / delete`；支持手写 YAML |
+| Web 知识库 | 知识库标签页：GET /api/skills 置信度降序 + 详情懒加载 + 删除（仅 manage_skills 角色）；排查 done 事件提示命中的历史经验（skill_used） |
 
 ### M7 · 多租户与生产化
 
@@ -199,6 +203,7 @@ flowchart TB
 | API Key 认证 | `AuthMiddleware`：`X-API-Key` 或 `Bearer`；角色 admin / operator / viewer（读写/排查/管用户权限集） |
 | 通知集成 | 钉钉 / 飞书 / Slack webhook（markdown 消息，fail-soft）：排查完成、动作确认事件 |
 | 历史检索 | `history list / show` 排查历史持久化与查询 |
+| Web 生产化 | 登录遮罩（API Key）+ 排查历史标签页 + 敏感操作 SSE 确认弹窗（WebConfirmer 120s 超时 fail-safe 拒绝，CLI 路径保持 AutoDeny） |
 
 ### M8 · K8s 与基础设施排障
 
@@ -215,6 +220,7 @@ flowchart TB
 | LLM-as-Judge | `EvidenceJudge`：证据充分性锚定评分 0.0–1.0（根因准确性 + 证据链），纳入 eval 流程 |
 | A/B 模型对比 | `open-tam eval-compare`：多模型 × 故障集对比，Markdown 报告含指标表 + 逐故障明细 |
 | CI 质量门 | `open-tam eval --min-hit-rate 0.8`：定位率低于阈值退出码 1，可直接接 CI |
+| Web 评测标签页 | eval 结果落库 eval_runs（schema v2 迁移）：SVG 趋势折线图 + A/B 对比表 + runs 明细懒加载（GET /api/evals） |
 
 ### M10 · 告警风暴与高级编排
 
@@ -223,6 +229,7 @@ flowchart TB
 | 告警关联聚合 | `AlertCorrelator`：时间窗口 + 服务重叠 + 依赖配置 → AlertGroup，风暴降噪 |
 | 优先级排查队列 | `PriorityQueue`（heapq）：P0–P3 分级，P0 抢占 P2 |
 | 修复 Playbook | YAML 定义（敏感度/auto_execute/on_failure=abort\|continue\|rollback/confidence_threshold），经 Guardrails 逐条执行 |
+| 跨集群/跨区域 | `OPEN_TAM_REGIONS`（逗号分隔）多区域配置：MultiRegionBackend 并行 fan-out query_metrics/query_logs 聚合为 `{"regions": [...]}`，单区域错误隔离，其余工具透传主区域；`fault inject --region` 区域级故障 |
 
 ## 产品主页（GTM 落地页）
 
@@ -255,11 +262,11 @@ python3 -m http.server 8643 --directory GTM
 | M3 护栏 + 巡检 | 已完成（白名单拦截、审计日志、阈值巡检报告、fake 回归） |
 | M4 Web UI | 已完成（SSE 流式排查 + 单页聊天界面，浏览器 golden path 验收 + 刷新重放） |
 | M5 实盘接入 | 已完成（多格式 webhook + 签名/去重 + aliyun CMS/SLS MCP 后端路由） |
-| M6 知识沉淀 | 已完成（trace 提取 Skill + 匹配注入 + CLI 管理） |
-| M7 多租户与生产化 | 已完成（SQLite 持久化 + API Key 认证 + 通知集成） |
+| M6 知识沉淀 | 已完成（trace 提取 Skill + 匹配注入 + CLI 管理 + Web 知识库标签页） |
+| M7 多租户与生产化 | 已完成（SQLite 持久化 + API Key 认证 + 通知集成 + Web 登录/历史/敏感操作确认） |
 | M8 K8s 排障 | 已完成（K8sGPT 风格 MCP + k8s-agent + 4 种新故障模式） |
-| M9 高级评测 | 已完成（LLM-as-Judge + A/B 对比 + CI 质量门） |
-| M10 告警风暴与高级编排 | 已完成（关联聚合 + 优先级队列 + Playbook 修复编排） |
+| M9 高级评测 | 已完成（LLM-as-Judge + A/B 对比 + CI 质量门 + Web 评测标签页） |
+| M10 告警风暴与高级编排 | 已完成（关联聚合 + 优先级队列 + Playbook 修复编排 + 跨集群/跨区域排查） |
 
 ## 快速开始
 
@@ -304,9 +311,9 @@ uv run open-tam eval --faults cpu_spike --runs 3  # 指定故障、重复多次
 | 命令 | 说明 |
 |---|---|
 | `open-tam metrics query --metric cpu_usage --service demo-app --start <iso> --end <iso>` | 查指标（`--transport mcp` 走 MCP stdio 后端） |
-| `open-tam fault inject cpu_spike` / `fault clear cpu_spike` / `fault list` | 故障注入 |
+| `open-tam fault inject cpu_spike [--region cn-hangzhou]` / `fault clear cpu_spike` / `fault list` | 故障注入（缺 region 全局生效，指定 region 仅该区域异常） |
 | `open-tam investigate --alert-file <json> [--fake] [--transport mcp]` | 排查闭环，报告落盘 `reports/` |
-| `open-tam eval [--fake] [--faults a,b] [--runs N]` | 批量评测：根因定位率/关键词命中率/平均步数 |
+| `open-tam eval [--fake] [--faults a,b] [--runs N]` | 批量评测：根因定位率/关键词命中率/平均步数，结果自动落库 eval_runs（Web 评测标签页展示趋势） |
 | `uvicorn demo_app.app:app --port 8000` | 启动被诊断对象 demo-app（`/health` `/metrics` `/faults`） |
 | `uv run python -m open_tam.mcp_servers.metrics_server` | 启动 mock-metrics MCP stdio 服务 |
 | `open-tam logs query --service demo-app --start <iso> --end <iso> [--level ERROR] [--keyword slow]` | 查日志（双后端同 metrics） |
