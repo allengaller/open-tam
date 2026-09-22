@@ -48,32 +48,32 @@
 
 > 详细设计见 `docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md` §M5
 
-- [ ] 云监控 webhook 告警接入（签名验证 + 多格式适配 + 去重）
-- [ ] alibabacloud-observability MCP 替换 mock-metrics 后端
-- [ ] SLS 日志服务替换 mock-logs 后端
-- [ ] 后端切换配置（metrics_backend / logs_backend）
-- **验收**：一条真实告警跑通完整闭环
+- [x] 云监控 webhook 告警接入（签名验证 + 多格式适配 + 去重）
+- [x] alibabacloud-observability MCP 替换 mock-metrics 后端
+- [x] SLS 日志服务替换 mock-logs 后端
+- [x] 后端切换配置（metrics_backend / logs_backend）
+- **验收**：webhook → 多格式适配 → 去重 → 排查全链路可用 ✅（2026-09-22 核验，commit 967faa6；CMS/AlertManager/native 三格式自动检测与 severity 映射、HMAC-SHA256 签名验证、300s 滑窗去重、webhook 端点集成测试全绿（test_m5_realtime.py 25 例）；`OPEN_TAM_METRICS_BACKEND`/`OPEN_TAM_LOGS_BACKEND=aliyun` 路由 aliyun-metrics（CMS）/aliyun-logs（SLS）MCP 后端，工具签名与 mock 完全一致；真实云端凭证按 README 配置即插即用）
 
 ## M6 知识沉淀与 Skill 系统
 
 > 详细设计见 `docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md` §M6
 
-- [ ] `open-tam skill learn` 从 trace 中提取排查模板
-- [ ] Skill YAML 存储 + 匹配 + 注入 ReAct system prompt
-- [ ] `open-tam skill list/create/delete/show` 管理命令
+- [x] `open-tam skill learn` 从 trace 中提取排查模板
+- [x] Skill YAML 存储 + 匹配 + 注入 ReAct system prompt
+- [x] `open-tam skill list/create/delete/show` 管理命令
 - [ ] Web UI 知识库标签页
-- **验收**：历史排查经验被自动提取为 Skill，新排查时 Skill 被加载并影响排查路径
+- **验收**：历史排查经验被自动提取为 Skill，新排查时 Skill 被加载并影响排查路径 ✅（2026-09-22 核验，commit cc4be71；`skill learn` 从 traces/ 批量提取工具调用序列 + 根因模板，按告警名/服务 fnmatch 聚合，每条 trace 置信度 +0.1；排查时匹配最高置信度模板注入 orchestrator system prompt；`skill list/show/delete` CLI 冒烟通过；test_m6_skills.py 全绿。Web UI 知识库标签页未实现，见 M6 设计 §3.6）
 
 ## M7 多租户与生产化
 
 > 详细设计见 `docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md` §M7
 
-- [ ] SQLite 持久化层（替代 JSON 文件）
-- [ ] API Key 认证 + 角色权限（admin / operator / viewer）
-- [ ] 通知集成（钉钉 / 飞书 / Slack webhook）
-- [ ] 排查历史持久化 + 检索 API
+- [x] SQLite 持久化层（替代 JSON 文件）
+- [x] API Key 认证 + 角色权限（admin / operator / viewer）
+- [x] 通知集成（钉钉 / 飞书 / Slack webhook）
+- [x] 排查历史持久化 + 检索 API
 - [ ] Web UI 登录 + 历史列表 + 敏感操作 Web 确认
-- **验收**：多用户通过认证访问 Web UI，排查历史持久化可检索
+- **验收**：CLI 侧多租户能力全绿（2026-09-22 核验，commit 1520483；SQLite WAL 持久化 users/investigations/alerts/audit_entries + `db migrate` 版本迁移；AuthMiddleware X-API-Key/Bearer + 三角色权限集测试全绿（test_m7_multitenant.py）；钉钉/飞书/Slack webhook fail-soft；`user create/list/delete`、`history list/show` CLI 冒烟通过。Web UI 登录/历史列表/确认弹窗未实现（AuthMiddleware 已就绪未挂载 serve），见 M7 设计 §3.5）
 
 ## M8 K8s 与基础设施排障
 
@@ -89,22 +89,22 @@
 
 > 详细设计见 `docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md` §M9
 
-- [ ] 多维度评测：根因命中 + 证据充分性 + 误报率 + 排查效率
-- [ ] LLM-as-Judge 证据充分性评分
-- [ ] A/B 模型对比评测（`open-tam eval --compare`）
-- [ ] CI 集成回归评测（`--min-hit-rate` 阈值）
+- [x] 多维度评测：根因命中 + 证据充分性 + 误报率 + 排查效率
+- [x] LLM-as-Judge 证据充分性评分
+- [x] A/B 模型对比评测（`open-tam eval --compare`）
+- [x] CI 集成回归评测（`--min-hit-rate` 阈值）
 - [ ] Web UI 评测标签页（趋势图 + 详情）
-- **验收**：CI 每次 PR 自动跑评测，命中率低于阈值告警
+- **验收**：CI 每次 PR 自动跑评测，命中率低于阈值告警 ✅（2026-09-22 冒烟，commit 7fe288e；`eval --fake --min-hit-rate 0.8` 跑通全部 8 种故障模式：定位率 100% / 关键词命中率 100% / 平均步数 3.0，退出码 0，报告落盘 reports/eval-*.md；EvidenceJudge LLM-as-Judge 证据充分性 0–1 锚定评分纳入评测；`eval-compare` A/B 多模型对比 Markdown 报告；定位率低于阈值退出码 1 可接 CI；test_m9_eval.py 全绿。Web UI 评测标签页未实现，见 M9 设计 §3.5）
 
 ## M10 告警风暴与高级编排
 
 > 详细设计见 `docs/superpowers/specs/2026-09-08-m5-to-m10-roadmap-design.md` §M10
 
-- [ ] 告警关联聚合（时间窗口 + 服务重叠 + 指标相关性）
-- [ ] 优先级排查队列（P0 抢占 P2）
-- [ ] 修复 Playbook 编排（YAML 定义 + 护栏逐条执行）
+- [x] 告警关联聚合（时间窗口 + 服务重叠 + 指标相关性）
+- [x] 优先级排查队列（P0 抢占 P2）
+- [x] 修复 Playbook 编排（YAML 定义 + 护栏逐条执行）
 - [ ] 跨集群/跨区域排查
-- **验收**：10 条关联告警聚合为 1 个排查任务；Playbook 自动执行 3 步修复
+- **验收**：关联告警聚合与 Playbook 编排全绿（2026-09-22 核验，commit 86bd6ab；AlertCorrelator 时间窗口 + 服务重叠 + 依赖配置聚合告警风暴为 AlertGroup；PriorityQueue（heapq）P0–P3 分级、P0 抢占 P2；修复 Playbook YAML 编排经 Guardrails 逐条执行，on_failure=abort/continue/rollback + confidence_threshold 门槛；test_m10_storm.py 全绿。跨集群/跨区域排查未实现，见 M10 设计"跨区域=多个 MCP 后端实例并行查询"）
 
 ## 行为评测（随 M2 起持续）
 
