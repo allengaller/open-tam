@@ -393,10 +393,6 @@ def skill_delete(skill_id: str) -> None:
         raise typer.Exit(1)
 
 
-if __name__ == "__main__":
-    main()
-
-
 user_app = typer.Typer(help="用户管理（创建/列出/删除）")
 app.add_typer(user_app, name="user")
 
@@ -540,3 +536,7 @@ def history_show(inv_id: str) -> None:
     typer.echo(f"Report: {inv.report_path or '-'}")
     typer.echo(f"Trace: {inv.trace_path or '-'}")
     typer.echo(f"Created: {inv.created_at}")
+
+
+if __name__ == "__main__":
+    main()
