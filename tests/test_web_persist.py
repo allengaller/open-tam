@@ -123,3 +123,62 @@ async def test_operator_can_investigate(db):
         r = await c.post("/api/investigations", json={"alert": ALERT, "fake": True},
                          headers={"X-API-Key": key})
     assert r.status_code == 202
+
+
+async def test_history_list_returns_persisted(db):
+    from open_tam.faults import FaultState
+    FaultState().activate("cpu_spike", duration_minutes=30)
+    app = create_app(db=db, auth_enabled=False)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+        r = await c.post("/api/investigations", json={"alert": ALERT, "fake": True})
+        inv_id = r.json()["id"]
+        await _drain_to_done(c, inv_id)
+
+        r = await c.get("/api/history")
+        assert r.status_code == 200
+        ids = [item["id"] for item in r.json()["investigations"]]
+        assert inv_id in ids
+        item = next(i for i in r.json()["investigations"] if i["id"] == inv_id)
+        assert item["status"] == "done"
+
+
+async def test_history_show_detail(db):
+    from open_tam.faults import FaultState
+    FaultState().activate("cpu_spike", duration_minutes=30)
+    app = create_app(db=db, auth_enabled=False)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+        r = await c.post("/api/investigations", json={"alert": ALERT, "fake": True})
+        inv_id = r.json()["id"]
+        await _drain_to_done(c, inv_id)
+
+        r = await c.get(f"/api/history/{inv_id}")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["id"] == inv_id
+        assert body["status"] == "done"
+        assert body["root_cause"]
+        assert body["report_path"]
+
+
+async def test_history_show_unknown_404(db):
+    app = create_app(db=db, auth_enabled=False)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+        r = await c.get("/api/history/nope")
+    assert r.status_code == 404
+
+
+async def test_viewer_can_read_history(db):
+    from open_tam.faults import FaultState
+    FaultState().activate("cpu_spike", duration_minutes=30)
+    op_key = _user(db, "u-op3", "operator")
+    viewer_key = _user(db, "u-viewer2", "viewer")
+    app = create_app(db=db, auth_enabled=True)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
+        r = await c.post("/api/investigations", json={"alert": ALERT, "fake": True},
+                         headers={"X-API-Key": op_key})
+        inv_id = r.json()["id"]
+        await _drain_to_done(c, inv_id)
+
+        r = await c.get("/api/history", headers={"X-API-Key": viewer_key})
+        assert r.status_code == 200
+        assert len(r.json()["investigations"]) >= 1

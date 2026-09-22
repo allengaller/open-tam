@@ -82,6 +82,31 @@ def create_app(*, db=None, auth_enabled: bool | None = None) -> FastAPI:
 
         return StreamingResponse(stream(), media_type="text/event-stream")
 
+    @app.get("/api/history")
+    async def history_list(limit: int = 20) -> dict:
+        from open_tam.persistence.repositories import InvestigationRepository
+
+        records = InvestigationRepository(db).list_all(limit=limit)
+        return {"investigations": [
+            {"id": r.id, "alert_id": r.alert_id, "user_id": r.user_id,
+             "status": r.status, "root_cause": r.root_cause,
+             "confidence": r.confidence, "created_at": r.created_at}
+            for r in records
+        ]}
+
+    @app.get("/api/history/{investigation_id}")
+    async def history_detail(investigation_id: str) -> dict:
+        from open_tam.persistence.repositories import InvestigationRepository
+
+        r = InvestigationRepository(db).get_by_id(investigation_id)
+        if r is None:
+            raise HTTPException(status_code=404, detail="unknown investigation")
+        return {"id": r.id, "alert_id": r.alert_id, "user_id": r.user_id,
+                "status": r.status, "root_cause": r.root_cause,
+                "confidence": r.confidence, "report_path": r.report_path,
+                "trace_path": r.trace_path, "created_at": r.created_at,
+                "updated_at": r.updated_at}
+
     @app.get("/api/faults")
     async def list_faults() -> dict:
         return {"faults": [
